@@ -18,6 +18,8 @@
 #                         label = CIC schedule overlaps bucket AND syn_count>threshold (WINDOW_LABEL_LOGIC=and|or).
 #   TIME_WINDOW_SECONDS   Bucket width in seconds (default 1) for per_second_window.
 #   WINDOW_LABEL_LOGIC    and (default) or or — see pcap_to_images.py --help
+#   LABEL_SOURCE          schedule_syn (default) or external — see pcap_to_images.py --help
+#   EXTERNAL_LABELS_JSON  Path to validated-labels JSON (required when LABEL_SOURCE=external)
 
 set -uo pipefail
 
@@ -37,6 +39,8 @@ PACKETS_PER_IMAGE="${PACKETS_PER_IMAGE:-10}"
 CONVERSION_MODE="${CONVERSION_MODE:-per_pcap}"
 TIME_WINDOW_SECONDS="${TIME_WINDOW_SECONDS:-1}"
 WINDOW_LABEL_LOGIC="${WINDOW_LABEL_LOGIC:-and}"
+LABEL_SOURCE="${LABEL_SOURCE:-schedule_syn}"
+EXTERNAL_LABELS_JSON="${EXTERNAL_LABELS_JSON:-}"
 
 CLASSIFIER="$REPO/scripts/classify_pcap_syn.py"
 CONVERTER="$REPO/scripts/pcap_to_images.py"
@@ -52,7 +56,12 @@ for pcap in *.pcap; do
   [ $n -ge "$MAX_FILES" ] && break
 
   if [[ "$CONVERSION_MODE" == "per_second_window" ]]; then
-    # Per UTC time bucket: one PNG = all packets in [t, t+TIME_WINDOW_SECONDS); label = schedule + SYN count per bucket.
+    label_args=(--label-source "$LABEL_SOURCE")
+    if [[ "$LABEL_SOURCE" == "external" ]]; then
+      label_args+=(--external-labels "$EXTERNAL_LABELS_JSON")
+    fi
+    # Per UTC time bucket: one PNG = all packets in [t, t+TIME_WINDOW_SECONDS); label = schedule + SYN count per bucket
+    # (default), or from EXTERNAL_LABELS_JSON when LABEL_SOURCE=external.
     "$PYTHON" "$CONVERTER" \
       --pcap "$(pwd)/$pcap" \
       --split-out-root "$IMG_ROOT/train" \
@@ -62,8 +71,9 @@ for pcap in *.pcap; do
       --window-label-logic "$WINDOW_LABEL_LOGIC" \
       --max-images "$MAX_IMAGES" \
       --sample-strategy "$PCAP_SAMPLE_STRATEGY" \
-      --prefix "${pcap%.pcap}"
-    echo "$pcap -> per_second_window (${TIME_WINDOW_SECONDS}s buckets)"
+      --prefix "${pcap%.pcap}" \
+      "${label_args[@]}"
+    echo "$pcap -> per_second_window (${TIME_WINDOW_SECONDS}s buckets, label_source=$LABEL_SOURCE)"
   else
     # 1) Classify whole PCAP (ddos vs normal): SYN count or CIC schedule (+ fallback)
     if [[ "$CLASSIFY_METHOD" == "cic_schedule" ]]; then

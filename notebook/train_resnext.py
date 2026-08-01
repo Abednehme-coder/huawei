@@ -129,6 +129,8 @@ def make_transforms(
     augment: bool,
     crop_scale_min: float = 0.7,
     crop_scale_max: float = 1.0,
+    norm_mean: Optional[list] = None,
+    norm_std: Optional[list] = None,
 ):
     def to_rgb_np(img):
         # img: HWC numpy array
@@ -162,10 +164,12 @@ def make_transforms(
         else:
             ops_list += [vision.Resize((img_size, img_size))]
 
-    # IMPORTANT: rescale to [0,1] before ImageNet normalization.
+    # IMPORTANT: rescale to [0,1] before normalization.
+    mean = norm_mean if norm_mean is not None else IMAGENET_MEAN
+    std = norm_std if norm_std is not None else IMAGENET_STD
     ops_list += [
         vision.Rescale(1.0 / 255.0, 0.0),
-        vision.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD, is_hwc=True),
+        vision.Normalize(mean=mean, std=std, is_hwc=True),
         vision.HWC2CHW(),
     ]
     return ops_list
@@ -183,6 +187,8 @@ def make_dataset(
     augment: bool,
     crop_scale_min: float = 0.7,
     crop_scale_max: float = 1.0,
+    norm_mean: Optional[list] = None,
+    norm_std: Optional[list] = None,
 ):
     split_dir = Path(data_root) / split
     if not split_dir.is_dir():
@@ -195,7 +201,7 @@ def make_dataset(
 
     dataset = dataset.map(
         operations=make_transforms(
-            split, img_size, resize_size, augment, crop_scale_min, crop_scale_max
+            split, img_size, resize_size, augment, crop_scale_min, crop_scale_max, norm_mean, norm_std
         ),
         input_columns="image",
         num_parallel_workers=num_workers,
@@ -562,6 +568,21 @@ def parse_args():
         help="RandomResizedCrop max scale (train augment only).",
     )
     parser.add_argument("--no-augment", action="store_true", help="Disable train-time augmentation.")
+    parser.add_argument(
+        "--norm-mean",
+        type=float,
+        nargs=3,
+        default=None,
+        help="Per-channel normalization mean (default: ImageNet mean, for non-natural-image inputs "
+        "trained from scratch pass dataset-computed stats instead).",
+    )
+    parser.add_argument(
+        "--norm-std",
+        type=float,
+        nargs=3,
+        default=None,
+        help="Per-channel normalization std (default: ImageNet std; see --norm-mean).",
+    )
     parser.add_argument("--no-class-weights", action="store_true", help="Disable auto class-weighting.")
     parser.add_argument(
         "--minority-boost",
@@ -645,6 +666,8 @@ def main():
         augment,
         crop_scale_min=args.crop_scale_min,
         crop_scale_max=args.crop_scale_max,
+        norm_mean=args.norm_mean,
+        norm_std=args.norm_std,
     )
     val_ds = make_dataset(
         val_root,
@@ -658,6 +681,8 @@ def main():
         False,
         crop_scale_min=args.crop_scale_min,
         crop_scale_max=args.crop_scale_max,
+        norm_mean=args.norm_mean,
+        norm_std=args.norm_std,
     )
     test_ds = make_dataset(
         test_root,
@@ -671,6 +696,8 @@ def main():
         False,
         crop_scale_min=args.crop_scale_min,
         crop_scale_max=args.crop_scale_max,
+        norm_mean=args.norm_mean,
+        norm_std=args.norm_std,
     )
 
     steps_per_epoch = train_ds.get_dataset_size()

@@ -3,8 +3,10 @@ import math
 import struct
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from PIL import Image
@@ -83,6 +85,85 @@ def is_tcp_syn(packet_bytes):
 
     flags = packet_bytes[tcp_start + 13]
     return (flags & 0x02) != 0  # SYN bit
+
+
+@dataclass(frozen=True)
+class ParsedPacket:
+    """5-tuple + timing-relevant fields for flow-level feature extraction."""
+
+    src_ip: str
+    dst_ip: str
+    src_port: int
+    dst_port: int
+    proto: int
+    tcp_flags: int
+    ip_total_len: int
+    captured_len: int
+
+
+def parse_ipv4_header(packet_bytes: bytes) -> Optional[ParsedPacket]:
+    """
+    Parse Ethernet(+VLAN)/IPv4/(TCP|UDP) headers into a ParsedPacket.
+
+    Mirrors is_tcp_syn's link-layer detection (same VLAN/eth_type handling) but
+    additionally reads src/dst IP, src/dst port, full TCP flags byte, and IP
+    total length. Returns None for non-IPv4 frames or headers too short to
+    parse safely. Does not modify or call is_tcp_syn.
+    """
+    if len(packet_bytes) < 14:
+        return None
+
+    offset = 12
+    eth_type = int.from_bytes(packet_bytes[offset:offset + 2], "big")
+
+    if eth_type == 0x8100 and len(packet_bytes) >= 18:
+        eth_type = int.from_bytes(packet_bytes[16:18], "big")
+        ip_start = 18
+    else:
+        ip_start = 14
+
+    if eth_type != 0x0800:  # IPv4
+        return None
+
+    if len(packet_bytes) < ip_start + 20:
+        return None
+
+    ihl = (packet_bytes[ip_start] & 0x0F) * 4
+    if ihl < 20 or len(packet_bytes) < ip_start + ihl:
+        return None
+
+    ip_total_len = int.from_bytes(packet_bytes[ip_start + 2:ip_start + 4], "big")
+    proto = packet_bytes[ip_start + 9]
+    src_ip = ".".join(str(b) for b in packet_bytes[ip_start + 12:ip_start + 16])
+    dst_ip = ".".join(str(b) for b in packet_bytes[ip_start + 16:ip_start + 20])
+
+    l4_start = ip_start + ihl
+    src_port = 0
+    dst_port = 0
+    tcp_flags = 0
+
+    if proto == 6:  # TCP
+        if len(packet_bytes) < l4_start + 14:
+            return None
+        src_port = int.from_bytes(packet_bytes[l4_start:l4_start + 2], "big")
+        dst_port = int.from_bytes(packet_bytes[l4_start + 2:l4_start + 4], "big")
+        tcp_flags = packet_bytes[l4_start + 13]
+    elif proto == 17:  # UDP
+        if len(packet_bytes) < l4_start + 4:
+            return None
+        src_port = int.from_bytes(packet_bytes[l4_start:l4_start + 2], "big")
+        dst_port = int.from_bytes(packet_bytes[l4_start + 2:l4_start + 4], "big")
+
+    return ParsedPacket(
+        src_ip=src_ip,
+        dst_ip=dst_ip,
+        src_port=src_port,
+        dst_port=dst_port,
+        proto=proto,
+        tcp_flags=tcp_flags,
+        ip_total_len=ip_total_len,
+        captured_len=len(packet_bytes),
+    )
 
 
 def count_eligible_packets(path: Path, syn_only: bool) -> int:
@@ -181,10 +262,15 @@ def run_time_window_mode(
     cic_schedule: Path,
     syn_threshold: int,
     window_logic: str,
+    label_source: str = "schedule_syn",
+    external_labels: dict[str, str] | None = None,
 ) -> int:
     """
     One image per time bucket (default 1s UTC): all packets in that bucket concatenated.
-    Label = CIC schedule overlap with bucket AND (default) SYN count > threshold.
+    Default label_source='schedule_syn': CIC schedule overlap with bucket AND (default)
+    SYN count > threshold. label_source='external': bucket label comes from
+    external_labels[f"{pcap_stem}::{bucket_id}"] instead; buckets absent from
+    external_labels are dropped before sampling (not written as images at all).
     Writes under split_out_root/ddos and split_out_root/normal.
     """
     import json
@@ -194,6 +280,8 @@ def run_time_window_mode(
 
     if window_sec <= 0:
         raise ValueError("window_sec must be positive")
+    if label_source == "external" and external_labels is None:
+        raise ValueError("external_labels is required when label_source='external'")
 
     with open(cic_schedule, encoding="utf-8") as f:
         cfg = json.load(f)
@@ -208,6 +296,9 @@ def run_time_window_mode(
             syn_per_bucket[bid] += 1
 
     bucket_ids = sorted(buckets.keys())
+    if label_source == "external":
+        pcap_stem = pcap_path.stem
+        bucket_ids = [bid for bid in bucket_ids if f"{pcap_stem}::{bid}" in external_labels]
     if not bucket_ids:
         print(f"Saved 0 time-window images under {split_out_root}")
         return 1
@@ -238,15 +329,18 @@ def run_time_window_mode(
         t0_utc = datetime.fromtimestamp(t0_unix, tz=timezone.utc)
         t1_utc = datetime.fromtimestamp(t1_unix, tz=timezone.utc)
         sc = syn_per_bucket[bid]
-        cls = label_window_with_schedule_and_syn(
-            cfg,
-            t0_utc,
-            t1_utc,
-            str(pcap_path),
-            sc,
-            syn_threshold,
-            logic=window_logic,
-        )
+        if label_source == "external":
+            cls = external_labels[f"{pcap_path.stem}::{bid}"]
+        else:
+            cls = label_window_with_schedule_and_syn(
+                cfg,
+                t0_utc,
+                t1_utc,
+                str(pcap_path),
+                sc,
+                syn_threshold,
+                logic=window_logic,
+            )
         out_dir = ddos_dir if cls == "ddos" else normal_dir
         fname = f"{prefix}_t{int(t0_unix)}_syn{sc}.png"
         Image.fromarray(img_arr, mode="L").save(out_dir / fname)
@@ -346,6 +440,20 @@ def main():
         default="and",
         help="and: ddos if schedule overlaps bucket AND syn_count>threshold. or: either condition.",
     )
+    parser.add_argument(
+        "--label-source",
+        choices=["schedule_syn", "external"],
+        default="schedule_syn",
+        help="schedule_syn (default): existing schedule+SYN-count rule. "
+        "external: use --external-labels instead; buckets absent from it are dropped before sampling.",
+    )
+    parser.add_argument(
+        "--external-labels",
+        type=Path,
+        default=None,
+        help="JSON file mapping '<pcap_stem>::<bucket_id>' -> 'ddos'|'normal' "
+        "(required when --label-source=external).",
+    )
     args = parser.parse_args()
 
     pcap_path = Path(args.pcap)
@@ -360,6 +468,18 @@ def main():
             )
         if not args.cic_schedule.is_file():
             raise SystemExit(f"CIC schedule file not found: {args.cic_schedule}")
+
+        external_labels = None
+        if args.label_source == "external":
+            if args.external_labels is None or not args.external_labels.is_file():
+                raise SystemExit(
+                    "--label-source=external requires --external-labels to point at an existing JSON file."
+                )
+            import json
+
+            with open(args.external_labels, encoding="utf-8") as f:
+                external_labels = json.load(f)
+
         prefix = args.prefix or pcap_path.stem
         return run_time_window_mode(
             pcap_path,
@@ -371,6 +491,8 @@ def main():
             args.cic_schedule,
             int(args.window_syn_threshold),
             str(args.window_label_logic),
+            label_source=str(args.label_source),
+            external_labels=external_labels,
         )
 
     if args.out is None:

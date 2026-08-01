@@ -5,3 +5,5 @@ mindcv
 numpy
 Pillow
 pytest
+scikit-learn
+pandas
