@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Unzip one CICDDoS2019 PCAP zip and build BOTH image representations from
 # the cluster-validated labels (dataset/window_labels_validated_v1.json) in a
-# single pass per pcap, then clear staging and delete the zip:
+# single pass per pcap, then clear staging (the zip itself is kept -- local
+# disk has plenty of room, and re-downloading it is slow/flaky):
 #   1. byte-dump images (existing pcap_to_images.py encoding)      -> dataset/images_per_second_window_0p3_validated_v1
 #   2. FlowPic-style packet-histogram images (new encoding)        -> dataset/images_flowpic_0p3_validated_v1
 # Doing both from the same unzip avoids a second re-download of the raw PCAPs.
@@ -61,5 +62,4 @@ done
 
 echo "ZIP DONE: $ZIP_NAME"
 rm -rf "${STAGING:?}"/*
-rm -f "$Z"
-echo "Staging cleared, zip deleted."
+echo "Staging cleared. Zip kept at $Z."

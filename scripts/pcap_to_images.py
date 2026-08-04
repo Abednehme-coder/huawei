@@ -342,7 +342,11 @@ def run_time_window_mode(
                 logic=window_logic,
             )
         out_dir = ddos_dir if cls == "ddos" else normal_dir
-        fname = f"{prefix}_t{int(t0_unix)}_syn{sc}.png"
+        # bid (not int(t0_unix)) is the unique key here: for sub-1s windows,
+        # multiple consecutive buckets can truncate to the same whole second,
+        # and if they also share syn_count, a t0_unix-based filename would
+        # silently collide and overwrite. bid is monotonic per pcap.
+        fname = f"{prefix}_b{bid}_syn{sc}.png"
         Image.fromarray(img_arr, mode="L").save(out_dir / fname)
         saved += 1
 

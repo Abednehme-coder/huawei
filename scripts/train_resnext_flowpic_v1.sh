@@ -31,10 +31,12 @@ TRAIN_PY="${PROJECT_ROOT}/notebook/train_resnext.py"
 OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/model/flowpic_0p3_validated_v1}"
 DATA_ROOT="${DATA_ROOT:-${PROJECT_ROOT}/dataset/images_flowpic_0p3_validated_v1}"
 
-# Placeholder until scripts/compute_flowpic_norm_stats.py runs on the real
-# generated dataset -- override via env (NORM_MEAN="r g b" NORM_STD="r g b").
-NORM_MEAN="${NORM_MEAN:-0.5 0.5 0.5}"
-NORM_STD="${NORM_STD:-0.25 0.25 0.25}"
+# Computed via scripts/compute_flowpic_norm_stats.py on
+# dataset/images_flowpic_0p3_validated_v1/train (76,778 images, 2026-08-04)
+# -- override via env (NORM_MEAN="r g b" NORM_STD="r g b") if the dataset
+# changes and stats need recomputing.
+NORM_MEAN="${NORM_MEAN:-0.0071 0.0003 0.0004}"
+NORM_STD="${NORM_STD:-0.0592 0.0157 0.0145}"
 
 mkdir -p "${OUTPUT_DIR}"
 
