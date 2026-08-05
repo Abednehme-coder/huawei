@@ -68,6 +68,22 @@ def main():
     ap.add_argument("--num-workers", type=int, default=8)
     ap.add_argument("--img-size", type=int, default=224)
     ap.add_argument("--resize-size", type=int, default=256)
+    ap.add_argument(
+        "--norm-mean",
+        type=float,
+        nargs=3,
+        default=None,
+        help="Per-channel normalization mean (default: ImageNet mean). Must match the value "
+        "the checkpoint was TRAINED with, not just the data-root -- e.g. flowpic checkpoints "
+        "use dataset-computed stats, not ImageNet.",
+    )
+    ap.add_argument(
+        "--norm-std",
+        type=float,
+        nargs=3,
+        default=None,
+        help="Per-channel normalization std (default: ImageNet std; see --norm-mean).",
+    )
     ap.add_argument("--device-target", default="CPU", choices=["CPU", "GPU", "Ascend"])
     ap.add_argument("--device-id", type=int, default=0)
     ap.add_argument("--mode", choices=["GRAPH", "PYNATIVE"], default="GRAPH")
@@ -102,6 +118,8 @@ def main():
         resize,
         args.num_workers,
         False,
+        norm_mean=args.norm_mean,
+        norm_std=args.norm_std,
     )
 
     argmax = ops.Argmax(axis=1, output_type=ms.int32)

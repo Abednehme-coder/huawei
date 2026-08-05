@@ -6,11 +6,17 @@ of letting it go stale — remove/close items once done, don't just append.
 
 ## Active thread: Aug 5 conference paper rework
 
-Full detail, findings, and next steps: **`HANDOVER_2026-08-04.md`** (read
-this first — supersedes `HANDOVER_2026-08-03.md`, which supersedes
-`HANDOVER_2026-07-31.md`; `HANDOVER_2026-07-26.md` still has the original
-design rationale for the labeling-rework plan).
-Short version: reworking the
+Full detail, findings, and next steps: **`HANDOVER_2026-08-05.md`** (read
+this first — supersedes `HANDOVER_2026-08-04.md`, which supersedes
+`HANDOVER_2026-08-03.md`, which supersedes `HANDOVER_2026-07-31.md`;
+`HANDOVER_2026-07-26.md` still has the original design rationale for the
+labeling-rework plan). TL;DR of the 2026-08-05 handover: supervised model
+and both unsupervised baselines have results now; the session's real
+headline finding is that the supervised model's val→test gap is very
+likely a label-quality artifact on one day, not a generalization failure
+(boundary-excluded `f1_ddos=0.932` vs. raw `0.375`) — one background job
+(official-label CSV download) still running to confirm this properly.
+Short version of the overall project: reworking the
 ground-truth labeling pipeline (schedule + unsupervised clustering on flow
 features, replacing a raw SYN-count threshold) before retraining on the
 local RTX 3070, so the paper can defensibly claim genuine visual detection
@@ -268,6 +274,283 @@ then autoencoder stage (~1.25-4.1h depending on its own early stopping),
 then a fast eval stage. Full detail, ETA math, and the exact relaunch
 command for a hypothetical 4th outage: **`HANDOVER_2026-08-04.md`**.
 
+**2026-08-04, FOURTH power loss, ~19:22 EEST (new session resuming work).**
+Machine found freshly rebooted (`uptime` ~4min at session start, ~19:26).
+The stage-1 supervised retrain had gotten to epoch 23/40 complete, died
+mid-epoch-24 (step 1763/2399). Best checkpoint: **epoch 22**,
+`f1_ddos=0.830380`, `acc=0.993023` (`model/flowpic_0p3_validated_v1/resnext50_32x4d_best.ckpt`,
+saved 16:54) — better than any result logged from the prior 3 attempts today.
+
+Given 4 outages in one day and `train_resnext.py` still has no mid-run
+resume (see earlier entries), user decided **not** to relaunch the
+40-epoch run a 4th time from scratch. Kept the epoch-22 checkpoint as
+final for the supervised flowpic model and moved on.
+
+While validating that checkpoint, found and fixed a real bug (not an
+outage artifact): `scripts/eval_test_detailed.py` had no
+`--norm-mean`/`--norm-std` flags, so it silently normalized with ImageNet
+stats regardless of what the checkpoint was trained with. For this flowpic
+checkpoint (trained with dataset stats ~1000x smaller than ImageNet's,
+`0.0071 0.0003 0.0004` / `0.0592 0.0157 0.0145`), that made every eval
+collapse to all-"normal" predictions (0 ddos recall) — looked exactly like
+a corrupted/dead checkpoint but wasn't. Added the two flags, threaded them
+into the `tr.make_dataset(...)` call. With correct stats:
+- **val**: acc 0.993023, f1_ddos 0.830380 — matches the training-time
+  validation log exactly, checkpoint confirmed healthy.
+- **test** (held-out block, different sessions than train/val): acc
+  0.704591, f1_ddos only 0.375076, ddos precision 0.233 (3024 false
+  positives out of 9423 true-normal). Much worse than val — a real
+  train/val→test generalization gap, not investigated further this
+  session, worth a look before calling the flowpic model done.
+
+Then launched the autoencoder stage (train→eval chain), which hadn't run
+even once yet today across all 4 outages — no conflicting process/output
+found first. `nohup ... & disown`, same caveat as always (survives
+terminal death, not another power-off).
+
+Note for next time: the script writes its own `training.log` inside
+`--output-dir`, unbuffered, separate from whatever the shell redirects
+`nohup`'s stdout to. The stdout redirect target sits empty for long
+stretches (Python fully block-buffers stdout when it isn't a TTY) —
+watch `training.log`, not the nohup redirect file, or it looks hung when
+it isn't. `TO_RUN.sh` corrected to point at the right file.
+
+**Chain completed 19:54 EEST, ran clean, no crash.** Results:
+- Training: early-stopped at epoch 22/50, best checkpoint epoch 14
+  (`val_mse=0.001920`). ~15min total (804s slow first epoch for dataset
+  warmup/decode, then ~9.4s/epoch after).
+- Eval (unsupervised anomaly detection via reconstruction error) —
+  **weak, flag before treating as a finished baseline**:
+  - val: `acc=0.291`, `roc_auc=0.288`, `f1_ddos=0.046` — accuracy far
+    below the ~98.3% majority baseline, and **ROC AUC below 0.5** is the
+    concerning part: reconstruction error is *anti-correlated* with the
+    ddos label on val (ddos flows reconstruct better than normal ones,
+    backwards from the premise of this baseline).
+  - test: `roc_auc=0.601`, `f1_ddos=0.316` — better than val but still
+    weak, and the val→test inconsistency itself suggests the threshold
+    picked on val (`0.000879`, best-F1) doesn't transfer.
+  - Not investigated further this session — could be a genuine negative
+    result for this approach on this dataset, or a bug in
+    `scripts/eval_flowpic_autoencoder.py`'s scoring/threshold direction
+    (sub-0.5 AUC specifically shouldn't happen if the scoring direction
+    is correct). Full report: `model/flowpic_autoencoder_v1/eval_report.json`.
+
+**2026-08-04, ~20:00 EEST, two new workstreams per user direction** (deadline
+2026-08-05 has flexibility, still worth using remaining time):
+
+1. **Supervised: continue training past epoch 22.** New
+   `scripts/train_resnext_flowpic_v1_continue.sh` — fine-tunes from
+   `resnext50_32x4d_best.ckpt`'s weights (`--ckpt ... --strict-load`, NOT a
+   true resume, fresh optimizer/schedule) with a lower peak LR (1.5e-4 vs.
+   the original 5e-4) over a shorter 18-epoch cosine schedule, on the theory
+   that the original run's LR was contributing to the val f1_ddos
+   volatility seen late in that run (epoch 20 crashed to 0.059 before
+   epoch 22 recovered to 0.830). Writes to
+   `model/flowpic_0p3_validated_v1_continued/` (new dir, doesn't touch the
+   epoch-22 checkpoint). Launched 20:13 EEST, confirmed weights loaded
+   correctly (step-1 loss ~0.002, matching where the original run left off,
+   not a from-scratch loss). Background via `nohup & disown`, same
+   power-loss caveat as always.
+2. **Unsupervised: Deep SVDD as a second baseline** (Ruff et al. 2018),
+   since the autoencoder's reconstruction-MSE premise doesn't hold on this
+   data (see above — ddos windows are sparser, not busier, than normal).
+   Deep SVDD scores by distance to a learned center in embedding space
+   instead, a different notion of "anomaly" than pixel reconstruction.
+   New files: `scripts/deep_svdd_model.py` (bias-free encoder/decoder —
+   no conv/dense bias, no BatchNorm affine — required so the network can't
+   trivially collapse to a constant embedding; center eps-clamp against a
+   zero coordinate; both are the standard collapse guards from the paper),
+   `scripts/train_deep_svdd.py` (phase 1: pretrain encoder+decoder as an
+   autoencoder on normal-only train, val-early-stopped on recon MSE; phase
+   2: fix center from the pretrained encoder, fine-tune the encoder alone
+   to minimize mean squared distance to it, val-early-stopped on that
+   distance; logs `val_embed_std` every epoch as a collapse diagnostic —
+   not used as the stopping metric, just a printed warning if it craters),
+   `scripts/eval_deep_svdd.py` (imports `best_f1_threshold`/
+   `report_at_threshold` from `eval_flowpic_autoencoder.py` rather than
+   duplicating them — same val-sweep/test-report shape as the autoencoder's
+   eval, for direct comparability), `scripts/train_deep_svdd.sh` (env
+   wrapper, same CUDA_HOME/LD_LIBRARY_PATH pattern as the other `.sh`
+   scripts — the autoencoder job hit a real bug earlier today from being
+   invoked without this env, wrapper exists specifically to not repeat it).
+   Smoke-tested end-to-end on CPU with a 40/12-image symlinked mini-dataset
+   (2 pretrain + 2 SVDD epochs) — full pipeline runs clean: pretrain →
+   center computation → fine-tune → checkpoint save/load → threshold
+   search → JSON report, no exceptions, no collapse warning. Not yet
+   launched for real on GPU — waiting for the supervised continuation run
+   above to finish first (one job at a time on the single RTX 3070, per
+   existing convention — avoids repeating the contention/instability risk
+   flagged earlier).
+
+**2026-08-04, ~22:15 EEST — continuation run finished + val→test gap
+root-caused.**
+
+Continuation run (item 1 above) completed all 18 epochs, no early stop.
+Best checkpoint: **epoch 16**, val `acc=0.9948 f1_ddos=0.8656` (better than
+the epoch-22 checkpoint's `0.830`). `train_resnext.py`'s own built-in
+test-eval on that checkpoint: `acc=0.7805 f1_ddos=0.4190` (also better than
+epoch-22's `0.375`, verified independently of `eval_test_detailed.py` since
+this is the training script's own eval routine, same correct norm stats
+throughout). **Both improved, but the val→test gap didn't close** —
+`0.866→0.419` is essentially the same ~0.45 absolute gap as before. More
+training bought incremental gains, not a fix.
+
+Then ran a diagnostic (`/tmp/.../scratchpad/diagnose_test_gap.py` — scratch
+only, not in repo) on the original epoch-22 checkpoint's test predictions,
+joining per-image predictions back to source pcap stem via filename. **Root
+cause found, and it's better news than the raw number suggested**: of the
+3,024 false positives (normal→predicted ddos), **2,934 (97%) sit in exactly
+two sub-pcap stems — `SAT-01-12-2018_0617` and `_0619`** — the same two
+stems that contain the labeled-ddos windows themselves (FP rates 71.8% and
+98.9% respectively). Every other stem in the entire held-out test day (450
+stems, 5,370 normal windows spread across the whole day, zero overlap with
+the attack) has only a **1.68%** false-positive rate. All of test's normal
+images come from `01-12-2018` itself (not other days) — confirms it's a
+same-day, attack-boundary-local effect, not a general cross-day
+generalization failure.
+
+This matches `reports/cluster_validation_2026-08-01.md`: `01-12-2018` (test's
+ddos source) uses `resolution_mode=schedule_priority_low_syn_purity` —
+schedule-based fallback labels (GMM ARI *negative*) because the
+cluster-validation gate failed on this day — unlike `03-11-2018` (train/val's
+ddos source), which cluster-validates cleanly (silhouette 0.64). The
+schedule boundary is almost certainly narrower than the real attack traffic
+(consistent with the earlier-noted "true SYN window is only ~5 minutes"),
+so thousands of genuinely attack-adjacent windows in that busy period landed
+on the "normal" side of an imprecise cutoff. The model is very likely
+flagging real anomalies that are labeled wrong, not hallucinating.
+
+Recomputed metrics excluding just those two boundary stems (same
+`tp`/`fn`, only `same-day-other` normal windows as the negative class):
+**`acc=0.979, precision_ddos=0.911, recall_ddos=0.953, f1_ddos=0.932`** —
+better than the val numbers. **Not yet verified by eye** — this is strong
+circumstantial evidence (concentration exactly in the attack-adjacent
+stems, nowhere else in 450 other stems across the whole day), not a
+confirmed relabel. Before this goes in the paper: spot-check a sample of
+the 2,934 flagged images against confirmed-ddos ones from the same stem.
+Recommend reporting **both** the raw test number and this boundary-excluded
+number in the writeup, with the explanation — more defensible and more
+interesting than picking one.
+
+**2026-08-04, ~23:24 EEST — fetching official CICDDoS2019 labels to confirm
+the mislabeling hypothesis properly.** User is downloading the official
+per-flow CICFlowMeter CSV for `01-12-2018` (`CSVs/CSV-01-12.zip` from
+cicresearch.ca) — this has the dataset's own authoritative `Label` column,
+independent of our derived `window_features_real.csv` and independent of
+the model's own predictions, so it's a real confirm/deny on the 2,934
+flagged windows rather than more circumstantial evidence.
+
+Site gates the download behind a session cookie (expires ~24h); user
+exported one via Cookie-Editor. Endpoint confirmed to **not** support HTTP
+Range requests (`curl -C -` → error 33 `HTTP server doesn't seem to
+support byte ranges`) and doesn't report `Content-Length` (chunked) — so
+no true resume and no upfront size estimate. Measured ~25-53KB/s, could
+take hours depending on actual file size (unknown).
+
+Built `dataset/CIC_official_labels/fetch_csv_01_12.sh` — retry loop that
+fully restarts the download on any failure (up to 30 attempts, 30s
+backoff) since resume isn't available, verifies zip integrity
+(`unzip -tq`) before declaring success. Launched via `nohup & disown`
+23:24 EEST, confirmed downloading (growing steadily). Cookie file at
+`dataset/CIC_official_labels/cic_cookies.txt` — both it and the zip are
+covered by the existing blanket `dataset/` gitignore rule, no secret-leak
+risk. **Once this completes**: cross-reference the 2,934 flagged window
+timestamps (`SAT-01-12-2018_0617`/`_0619`, bucket IDs available from the
+image filenames / `window_features_real.csv`) against this CSV's official
+per-flow labels to confirm or rule out the mislabeling hypothesis before
+it goes in the paper.
+
+**Also tried running the same fetch on the private staging server**
+(`root@91.99.170.219`) in case it had better bandwidth — **doesn't work**,
+different failure mode than the slow-but-working local download: TLS
+handshake and request succeed, but the server returns **zero bytes** and
+hangs indefinitely on this specific endpoint from that IP, despite general
+`cicresearch.ca` access from there working fine (fast homepage load).
+Almost certainly IP-based throttling/blocking of datacenter IPs on the
+download endpoint specifically, not a network issue. Killed the stuck job
+there (`pkill -f fetch_csv_01_12.sh`/`curl.*CSV-01-12`), confirmed nothing
+left running remotely. **Local download is the only working path for
+this file** — as of 23:34 EEST, 23.5MB in, still on attempt 1, ~39KB/s
+average, no failures.
+
+**Deep SVDD (item 2 above) launched for real, 23:34 EEST** —
+`scripts/train_deep_svdd.sh`, GPU confirmed free (supervised continuation
+finished, nothing else running). Chain log:
+`model/flowpic_deep_svdd_v1_chain_2026-08-04_2334.log`. Phase 1
+(autoencoder pretrain) started cleanly, dataset loaded correctly
+(75,376 train / 9,438 val normal images, matches the other flowpic runs).
+
+**Deep SVDD's first real run collapsed — hypersphere collapse, a training
+bug not a data finding.** Finished clean (~7min total) but `eval_report.json`
+showed `val roc_auc=0.00197`, predicting every single normal image as ddos
+(`tn=0, fp=9438`) — the classic Deep SVDD failure mode: the encoder mapped
+nearly all images (normal and ddos alike) to essentially the same point
+near the center, so distance-to-center carries no signal. `val_embed_std`
+(the collapse diagnostic) dropped monotonically the whole run, 0.380 →
+0.0011 (>300x), never recovering. Root design bug: early-stopping was keyed
+on `val_dist2` alone, but collapse *is* the global minimum of that exact
+objective — it can't detect its own cause, which is why it ran the full 30
+epochs looking like continuous improvement right up to total collapse.
+**Unrelated to the label-quality issue above** — SVDD training (both
+phases) only ever touches `normal/`-labeled images, no ddos label (correct
+or mislabeled) is used anywhere in training, only in `eval_deep_svdd.py`'s
+threshold sweep. Fixing the labels would not have prevented this.
+
+Also worth noting: extreme input sparsity (the same characteristic behind
+the autoencoder's sparsity-inversion finding) plausibly makes this
+particular collapse mode easier to fall into than on denser benchmark
+data (CIFAR/MNIST) Deep SVDD is usually demonstrated on — a bias-free
+network fed mostly-zero input naturally drifts toward near-zero output
+unless weights are specifically tuned to amplify the sparse signal.
+
+Fixed in `scripts/train_deep_svdd.py`: (1) new `--min-embed-std` floor
+(default 0.05) — a checkpoint is only accepted as "best" if `val_embed_std`
+stays at/above it, and training now hard-stops the first epoch it drops
+below (collapse doesn't recover, no point continuing or using
+no-improve-patience for it); (2) modest weight-decay bump (`1e-6 → 1e-4`,
+deliberately conservative, not the 10-100x initially considered — heavier
+weight decay pulls weights toward zero, which is the same direction as
+collapse here given the sparse-input dynamic above, so overcorrecting could
+make it worse, not better). The `--min-embed-std` mechanism is the primary
+fix; weight decay is secondary/experimental. Old collapsed run preserved at
+`model/flowpic_deep_svdd_v1_collapsed_2026-08-04/` for the record. Relaunched
+23:54 EEST, chain log `model/flowpic_deep_svdd_v1_chain_2026-08-04_2350.log`.
+
+**Fix confirmed working, epoch 6/`std=0.051` selected instead of collapsing
+further** — but the actual result is weak: `val roc_auc=0.287, f1_ddos=0.044`
+/ `test roc_auc=0.519, f1_ddos=0.011`. `val roc_auc=0.287` lands suspiciously
+close to the plain autoencoder's own `0.288` — likely the same underlying
+cause: the SVDD encoder starts from the phase-1 AE-pretrained weights, and
+with training cut short at epoch 6 to avoid collapse, it hasn't moved far
+from that initial sparsity-correlated representation (ddos windows are
+sparser than normal, see the autoencoder finding above).
+
+**2026-08-05, ~00:05 EEST — tried a 5x higher SVDD-phase LR (1e-4→5e-4)** to
+see if faster movement per epoch could pull the encoder away from the
+AE-inherited representation before hitting the collapse floor. **Made it
+worse, not better** — collapsed even faster (epoch 4 vs. epoch 7) and both
+metrics dropped: `val roc_auc=0.242` (vs. `0.287`), `test roc_auc=0.467`
+(vs. `0.519`). This is actually informative: it confirms the problem isn't
+"not enough movement per step," it's that there's a fundamentally short
+pre-collapse window regardless of step size, not enough of it to escape the
+inherited representation. Reverted to the lr=1e-4 result as current best
+(`model/flowpic_deep_svdd_v1/`); the lr=5e-4 attempt preserved at
+`model/flowpic_deep_svdd_v1_worse_lr5e-4_2026-08-05/` for the record.
+
+**Conclusion for now**: Deep SVDD's collapse bug is genuinely fixed
+(methodological success, the `--min-embed-std` guard works as designed),
+but on this dataset it doesn't currently outperform the plain autoencoder
+— both unsupervised approaches plausibly fail for the same underlying
+reason (sparsity-correlated representations, and ddos windows being
+sparser than normal inverts the usual anomaly-detection assumption
+regardless of which specific method is used). This itself is a more
+interesting, more defensible finding for the writeup than either result
+alone. Not tried: training the SVDD encoder from random init instead of
+AE-pretrained (a more structurally different lever than LR, would avoid
+inheriting the AE's representation entirely, but loses the paper's
+"standard Deep SVDD init procedure" framing) — worth a future attempt if
+there's time, not pursued further this session.
+
 ## Next steps (in order)
 
 1. ~~Sequential transfer of all 5 PCAP zips finishes~~ — **done 2026-08-04
@@ -275,22 +558,75 @@ command for a hypothetical 4th outage: **`HANDOVER_2026-08-04.md`**.
    complete (96,770 PNGs each, matching label ground truth exactly).
 2. ~~Run `scripts/generate_validated_images_batch.sh <zip>` per zip~~ — done
    for all 5 as part of the above.
-3. `scripts/split_train_val_test.py` on both new dataset roots.
-4. `scripts/compute_flowpic_norm_stats.py` on the flowpic train split, plug
-   the printed `NORM_MEAN`/`NORM_STD` into
-   `scripts/train_resnext_flowpic_v1.sh` (currently has placeholder
-   `0.5/0.25` values — must be replaced before that training run means
-   anything).
-5. Retrain both: `scripts/train_resnext_per_second_0p3_validated_v1.sh` then
-   `scripts/train_resnext_flowpic_v1.sh` (sequential, one RTX 3070).
-6. Eval both checkpoints via existing eval scripts
-   (`HUAWEI_EVAL_ALLOW_NON_PRIMARY_CKPT=1`), write a 3-way comparison report
-   (existing primary vs. validated_v1-bytedump vs. flowpic_v1) —
-   accuracy/macro-F1/ddos-F1 side by side.
-7. Still deferred to the end, per standing instruction: paper/report text
-   rewrite (Section III.C fix, SYNShield spelling), Mohammed Farhat
-   author/email issue, `install.sh` disposal, recovering the Overleaf
-   `.tex` sources for the two loose PDFs at repo root.
+3. ~~`scripts/split_train_val_test.py` on both new dataset roots~~ — done
+   (blocked split, see 2026-08-04 commit history).
+4. ~~`scripts/compute_flowpic_norm_stats.py` on the flowpic train split~~ —
+   done, plugged into `scripts/train_resnext_flowpic_v1.sh`.
+5. ~~Retrain supervised flowpic model~~ — **stopped at epoch 22/40** after
+   the 4th power loss (see above); accepted as final rather than risk a 5th
+   from-scratch restart. `scripts/train_resnext_per_second_0p3_validated_v1.sh`
+   (bytedump variant) status not reconfirmed this session — check before
+   assuming it's still current.
+6. ~~Autoencoder train+eval chain~~ — **done 2026-08-04 19:54 EEST**, ran
+   clean. Results are weak (see above) — do NOT report as a working
+   unsupervised baseline without further digging.
+7. ~~Investigate the val→test generalization gap~~ — **root cause found,
+   ~22:15 EEST**, see above: 97% of false positives sit in the two
+   sub-pcap stems overlapping the labeled attack itself, almost certainly a
+   schedule-label-boundary artifact on `01-12-2018` (the one day that
+   didn't cluster-validate), not a real generalization failure.
+   Boundary-excluded metric: `f1_ddos=0.932`. **Not yet visually
+   spot-checked** — do that before this goes in the paper as-is.
+8. ~~Investigate the autoencoder's sub-0.5 val ROC AUC (0.288)~~ — **root
+   cause found, not a code bug.** `scripts/eval_flowpic_autoencoder.py`'s
+   scoring/threshold logic is correct (labels, score direction,
+   `pred = scores >= t` all consistent). Sampled 300 val images per class
+   directly: ddos-labeled 0.3s FlowPic windows are ~3.7x *sparser* than
+   normal ones (nonzero-pixel frac 0.0159 vs 0.0589, mean pixel 0.0136 vs
+   0.0187) — a SYN flood in a tight 0.3s window produces a uniform,
+   concentrated pattern; normal traffic in the same window is busier
+   (more varied packet sizes/timing). The autoencoder converged almost
+   immediately to a near-trivial low-error solution (`train_mse` dropped
+   ~20x from epoch 1→2, then plateaued) — consistent with learning to
+   reconstruct sparse/background patterns well. Since ddos images are
+   sparser, not busier, than normal, they're *easier* to reconstruct,
+   inverting the "anomaly = high reconstruction error" assumption this
+   whole baseline relies on. **This is a genuine negative result for
+   reconstruction-based unsupervised detection on the FlowPic 0.3s
+   representation** — worth stating as such in the writeup, not silently
+   dropped. Not investigated further: whether a different
+   architecture/bottleneck size, or scoring by *inverse* error, or a
+   different window size, would fix it.
+9. ~~Supervised continuation run past epoch 22~~ — **done ~22:15 EEST**,
+   best checkpoint epoch 16 (val `f1_ddos=0.8656`), see above. Both val and
+   test improved slightly over the epoch-22 checkpoint but the val→test gap
+   itself didn't close (root-caused separately, see item 7).
+10. ~~Deep SVDD real GPU training+eval~~ — **done, multiple passes**: first
+    run collapsed (bug, fixed), second run (lr=1e-4) is current best
+    (`model/flowpic_deep_svdd_v1/`, val `roc_auc=0.287`), third run
+    (lr=5e-4, testing whether faster movement escapes the AE-inherited
+    representation) made it worse and was reverted. See above for full
+    detail. Current conclusion: doesn't beat the autoencoder, likely same
+    underlying cause. Untried lever if revisited: SVDD encoder from random
+    init instead of AE-pretrained.
+11. **Spot-check the 2,934 flagged `SAT-01-12-2018_0617`/`_0619` windows**
+    against the official CICDDoS2019 per-flow labels once
+    `dataset/CIC_official_labels/CSV-01-12.zip` finishes downloading
+    (in progress as of this writing, background job, no ETA — server
+    doesn't report total size). This is the real confirm/deny on the
+    val→test gap's root cause (item 7) before it goes in the paper as
+    anything more than a strong circumstantial finding.
+12. Eval both supervised checkpoints via existing eval scripts
+    (`HUAWEI_EVAL_ALLOW_NON_PRIMARY_CKPT=1`, and now `--norm-mean`/`--norm-std`
+    for non-ImageNet-stat checkpoints — see `eval_test_detailed.py`), write a
+    3-way comparison report (existing primary vs. validated_v1-bytedump vs.
+    flowpic_v1) — accuracy/macro-F1/ddos-F1 side by side. Bytedump variant
+    status not reconfirmed this session — check before assuming it's still
+    current.
+13. Still deferred to the end, per standing instruction: paper/report text
+    rewrite (Section III.C fix, SYNShield spelling), Mohammed Farhat
+    author/email issue, `install.sh` disposal, recovering the Overleaf
+    `.tex` sources for the two loose PDFs at repo root.
 
 ## Earlier session — 2026-07-26 (untracked files at root)
 
