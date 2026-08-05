@@ -34,7 +34,7 @@ import re
 import shutil
 from pathlib import Path
 
-STEM_RE = re.compile(r"^(.*?)_b\d+\.png$")
+STEM_RE = re.compile(r"^(.*?)_b\d+(?:_syn\d+)?\.png$")
 
 TEST_STEMS = {"SAT-01-12-2018_0617", "SAT-01-12-2018_0618", "SAT-01-12-2018_0619"}
 VAL_STEMS = {"SAT-03-11-2018_0143", "SAT-03-11-2018_0144"}

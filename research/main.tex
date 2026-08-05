@@ -330,7 +330,11 @@ ResNeXt-50 (32$\times$4d) for richer feature learning via grouped convolutions;
 (2) implementing training, evaluation, and deployment entirely in MindSpore with
 \texttt{mindcv}; (3) providing end-to-end automation from CICDDoS2019 zips to
 checkpoints and blind evaluation; (4) supporting optional per-time-window and
-imbalance-aware training variants in code.
+imbalance-aware training variants in code; (5) validating the SYN-count
+labeling heuristic against an independent, unsupervised cluster-based
+labeling pipeline and a stricter cross-day held-out split, quantifying how
+much of the resulting generalization gap is a labeling artifact versus
+genuine model imprecision (Section~\ref{sec:labelvalidation}).
 
 \section{Report Organization}
 Chapter~\ref{ch:lit} reviews related approaches. Chapter~\ref{chapter:3}
@@ -407,6 +411,7 @@ split into training, validation, and test image folders (\texttt{ddos/},
 \texttt{normal/}) after preprocessing.
 
 \subsection{PCAP labeling and packet-to-image encoding}
+\label{sec:pipeline}
 The repository implements a lightweight labeling rule: PCAP files with more
 than a fixed threshold of TCP \gls{syn} packets are treated as DDoS; others as
 normal. Packets are converted to grayscale images by mapping raw bytes to pixel
@@ -709,6 +714,98 @@ Loss / selection & Weighted CE / macro F1 (typ.) & Focal, early stop on val DDoS
 \label{tab:twopipes}
 \end{table}
 
+\subsection{Label-quality validation and cross-day generalization}
+\label{sec:labelvalidation}
+The primary results above rely on the SYN-count heuristic labeling
+described in Section~\ref{sec:pipeline}\footnote{PCAP labeling and
+packet-to-image encoding, Chapter~\ref{chapter:3}.}. To test whether that
+heuristic limits generalization to attack traffic it did not shape, we
+built a second, unsupervised labeling pipeline: $k$-means clustering on
+per-window flow features (packet counts, SYN ratio, inter-arrival
+statistics), accepting a cluster split as the attack label only if the
+picked cluster's mean SYN ratio exceeds the other cluster's --- a
+\emph{flood-signature gate} added specifically because the original
+whole-day $k=2$ split could pass its silhouette gate while separating on
+unrelated traffic volume rather than attack behavior (found on
+\texttt{01-12-2018}, whose true SYN window is only about 5 minutes).
+Where this gate fails, labeling falls back to the schedule-based labels
+used elsewhere in this report. We paired the revised labels with a
+\textbf{FlowPic}-style encoding~\cite{shapira2019flowpic}: each 0.3\,s
+window becomes a $64\times64\times3$ packet-size$\times$arrival-time
+histogram (all packets / SYN-only / ACK\,\textbar\,FIN\,\textbar\,RST
+channels), log-scaled against a fixed global clip so absolute traffic
+volume remains a real signal --- avoiding the natural-photo assumptions
+(ImageNet augmentation and normalization statistics) that the byte-dump
+encoding above carries despite being trained from scratch on packet
+bytes, not photographs.
+
+To stress-test generalization more strictly than the same-domain split
+used for the primary model, we held out an \textbf{entire attack day}
+(\texttt{01-12-2018}, 3 sub-pcap stems, 966 DDoS windows) as test and
+trained only on the other attack day (\texttt{03-11-2018}, 8 stems, 1402
+DDoS windows in train) plus normal-only captures split by whole source
+PCAP (never by individual window, to avoid adjacent-window leakage across
+splits). This is a genuine cross-day test: the model never sees any
+window --- attack or normal --- from the held-out day's attack execution
+during training.
+
+The resulting model (\path{model/flowpic_0p3_validated_v1_continued/})
+reached validation $\mathrm{f1\_ddos}=0.8656$ (epoch 16 of 18) but
+held-out cross-day test $\mathrm{f1\_ddos}$ dropped to \textbf{0.419}
+(Table~\ref{tab:gapfix}) --- a substantial same-checkpoint gap. Diagnosis
+found 97\% of the 2{,}136 test false positives concentrated in exactly
+the two sub-pcap stems containing the day's labeled DDoS windows, with a
+1.68\% false-positive rate everywhere else in the held-out day (450
+other stems, 5{,}370 normal windows). We cross-referenced the 2{,}071
+flagged windows in those two stems against CICFlowMeter's official
+per-flow \texttt{Label} column for \texttt{01-12-2018} --- independent of
+both our derived labels and the model's own predictions --- and confirmed
+\textbf{86 of 2{,}071} (4\%) are provably mislabeled by the
+schedule-boundary heuristic (real attack traffic marked ``normal''
+because the documented attack schedule window is narrower than the
+actual attack). Relabeling only those 86 raises test $\mathrm{f1\_ddos}$
+to \textbf{0.453}. The remaining 1{,}985 flagged windows fall outside the
+official label file's narrow $\sim$4-minute coverage and cannot be
+checked against it directly; feature statistics show them measurably
+busier than confirmed true negatives in the same stem, but a visual
+contact-sheet comparison shows they resemble sparse background traffic,
+not the bright horizontal-line SYN-flood signature confirmed-DDoS images
+show. We therefore report this as a real, only \emph{partially}
+label-driven cross-day generalization gap, not as a pure labeling
+artifact --- a more modest but more defensible claim than excluding the
+two stems outright would have been.
+
+\begin{table}[ht]
+\centering
+\caption[Cross-day test metrics, raw vs.\ corrected]{Cross-day test metrics on the validated-labels FlowPic model, before and after relabeling the 86 confirmed mislabels.}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Metric} & \textbf{Raw} & \textbf{Corrected (86 relabeled)} \\
+\hline
+Accuracy & 0.7805 & 0.7889 \\
+\hline
+DDoS precision & 0.278 & 0.307 \\
+\hline
+DDoS recall & 0.851 & 0.863 \\
+\hline
+DDoS F1 & 0.419 & 0.453 \\
+\hline
+\end{tabular}
+\label{tab:gapfix}
+\end{table}
+
+Two unsupervised baselines (a convolutional autoencoder and Deep
+SVDD~\cite{ruff2018deep}, trained on normal-only windows with no DDoS
+label ever seen) were also attempted on the same FlowPic representation,
+as a check on whether anomaly detection could sidestep the labeling
+question entirely. Both underperformed (test ROC AUC 0.60 and 0.52
+respectively) for the same underlying reason: DDoS windows in this 0.3\,s
+representation are sparser, not busier, than normal traffic, inverting
+the usual ``anomaly = high reconstruction/distance error'' assumption
+both methods rely on. We report this as a genuine negative result for
+reconstruction- and distance-based unsupervised detection on this
+representation, not a tuning failure.
+
 \subsection{Deployment-oriented inference}
 Live \path{run_pipeline.py} builds \textbf{per-packet} images within each
 PCAP window; offline 0.3\,s training uses \textbf{window-aggregated} images.
@@ -736,7 +833,12 @@ path (different image construction and traffic mix). Performance also depends on
 deployment traffic matches CICDDoS2019 labeling and windowing.
 Per-window and imbalance-focused runs may differ from the default image-folder
 training; adversarial traffic and payload encryption are out of scope for this
-baseline.
+baseline. Section~\ref{sec:labelvalidation} investigates the SYN-count
+labeling heuristic's effect on generalization directly: on a stricter
+cross-day held-out test, a confirmed 4\% of false positives trace to the
+labeling heuristic's schedule boundary, but the remaining gap reflects
+genuine cross-day generalization difficulty, not primarily a labeling
+artifact.
 
 
 \chapter{Conclusion and Future Work}
@@ -748,12 +850,33 @@ images (\path{per_second_0p3_focal_v2}). On held-out test data from the
 same distribution, accuracy was about 98.1\% with macro F1 about 0.94; blind
 sampling confirmed strong performance within the limits of class balance.
 
+To address the risk that the primary model's labels --- and consequently its
+strong same-domain numbers --- merely reflect the SYN-count heuristic used to
+generate them, Section~\ref{sec:labelvalidation} replaced that heuristic with
+an unsupervised, cluster-validated labeling pipeline and re-evaluated under a
+stricter cross-day held-out split (an entire attack day never seen in
+training, not just unseen windows). That model reached
+$\mathrm{f1\_ddos}=0.866$ on validation; cross-day test $\mathrm{f1\_ddos}$
+was 0.419 raw, 0.453 after correcting 86 confirmed label-boundary mislabels
+against the dataset's own official per-flow labels. We report this as a
+real, partially-explained generalization gap rather than either dismissing
+it as pure label noise or ignoring it --- the more defensible of the two
+framings we considered this cycle. Two unsupervised anomaly-detection
+baselines (autoencoder, Deep SVDD~\cite{ruff2018deep}) were also attempted on
+the same revised labels and encoding; both underperformed for a specific,
+diagnosed reason (DDoS windows are sparser, not busier, than normal traffic
+in this 0.3\,s representation, inverting the anomaly-detection premise both
+methods rely on) rather than from a tuning failure, which we record as a
+genuine negative result.
+
 Future work includes validation on additional datasets and attack types;
-systematic comparison of time-window lengths and dual-view (all-packets vs.\
-SYN-only) fusion; hardware acceleration beyond CPU-only deployment;
-stress-testing under concept drift, adversarial perturbations, and
-\textbf{domain adaptation} when live packet-to-image rules differ from offline
-windows; and \textbf{calibration} of live alerts (thresholds on
+completing the byte-dump encoding under the same cluster-validated labels for
+a full label-methodology $\times$ encoding ablation (in progress at the time
+of writing); systematic comparison of time-window lengths and dual-view
+(all-packets vs.\ SYN-only) fusion; hardware acceleration beyond CPU-only
+deployment; stress-testing under concept drift, adversarial perturbations,
+and \textbf{domain adaptation} when live packet-to-image rules differ from
+offline windows; and \textbf{calibration} of live alerts (thresholds on
 \path{p_ddos}, temporal smoothing, or hybrid rules) to reduce false positives
 on real Internet traffic.
 

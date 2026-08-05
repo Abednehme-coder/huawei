@@ -4,23 +4,144 @@ Running log of in-progress work and open threads for this repo, meant to be
 read at the start of a new session. Update it as things get resolved instead
 of letting it go stale — remove/close items once done, don't just append.
 
-## Active thread: Aug 5 conference paper rework
+## Active thread: Aug 5-6 conference paper rework — CLOSED OUT 2026-08-06
 
-Full detail, findings, and next steps: **`HANDOVER_2026-08-05.md`** (read
-this first — supersedes `HANDOVER_2026-08-04.md`, which supersedes
-`HANDOVER_2026-08-03.md`, which supersedes `HANDOVER_2026-07-31.md`;
-`HANDOVER_2026-07-26.md` still has the original design rationale for the
-labeling-rework plan). TL;DR of the 2026-08-05 handover: supervised model
-and both unsupervised baselines have results now; the session's real
-headline finding is that the supervised model's val→test gap is very
-likely a label-quality artifact on one day, not a generalization failure
-(boundary-excluded `f1_ddos=0.932` vs. raw `0.375`) — one background job
-(official-label CSV download) still running to confirm this properly.
-Short version of the overall project: reworking the
+**Read `HANDOVER_2026-08-06.md` first** — supersedes `HANDOVER_2026-08-05.md`
+(which is now stale on multiple points, not just the val→test-gap number).
+This thread's findings are now written into the actual paper sources
+(`research/main.tex`, `research/synshield_paper/paper.tex`) and a standalone
+report (`reports/label_validation_and_generalization_gap_2026-08-06.md`),
+committed and pushed — this is no longer just log entries, it's landed in
+the deliverables. Short version of the overall project: reworked the
 ground-truth labeling pipeline (schedule + unsupervised clustering on flow
-features, replacing a raw SYN-count threshold) before retraining on the
-local RTX 3070, so the paper can defensibly claim genuine visual detection
-rather than "just counting TCP [SYN packets] and labeling based on that."
+features, replacing a raw SYN-count threshold), retrained on a stricter
+cross-day held-out split, and found + reported a real (if partially
+label-driven) generalization gap rather than either hiding it or
+overclaiming a fix. See the 2026-08-05 ~23:35 EEST entry onward, below, for
+the final session's blow-by-blow (scope-cut decision, push-access fix,
+recovered Overleaf sources, paper edits).
+
+**2026-08-05 ~19:57 EEST update — official-label CSV finally in hand, via a
+third server.** Resuming this session: the local `CSV-01-12.zip` download
+(started 2026-08-04 23:24 EEST direct from cicresearch.ca) had died
+sometime overnight — process gone, file stuck at 336MB, fails zip-integrity
+check. User had *also* tried fetching it on the `root@91.99.170.219`
+staging server (per the 2026-08-05 handover, that IP is blocked by
+cicresearch.ca specifically for this endpoint) — checked it, confirmed:
+`fetch.log` there shows only one stalled attempt, no zip file anywhere on
+disk, no process running. **User then pointed at a third machine,
+`abed@62.238.30.120`** (password auth), which turned out to already have
+both `dataset/cicddos2019_csvs/CSV-01-12.zip` (2.33GB, contains
+`Syn.csv` + 10 other attack-type CSVs for that day) and `CSV-03-11.zip`
+(919MB) fully downloaded and zip-valid. No `sshpass`/`expect` available
+locally and no `sudo` to install one — used `pip3 install --user paramiko`
+instead. Pulling both files now via a paramiko SFTP script
+(`dataset/CIC_official_labels/pull_from_62.238.30.120.log` for progress),
+replacing the corrupt local `CSV-01-12.zip`. Transfer rate is modest
+(~0.7 MB/s observed early on) but this is a one-time pull of files that
+already exist in full elsewhere, not a live restart-prone download like
+the cicresearch.ca one — no retry logic needed. Once both land, resume the
+originally planned cross-check: match the 2,934 flagged
+`SAT-01-12-2018_0617`/`_0619` window bucket IDs against `Syn.csv`'s
+per-flow `Label` column (see §3 of `HANDOVER_2026-08-05.md`) to confirm or
+rule out the val→test-gap label-quality theory before it goes in the
+paper. The old `dataset/CIC_official_labels/fetch_csv_01_12.sh` /
+`cic_cookies.txt` (direct cicresearch.ca path) are now superseded for
+`CSV-01-12.zip` specifically but left in place — cookies may still be
+useful if any other CICDDoS2019 CSV needs fetching later.
+
+**2026-08-05 ~22:15 EEST — cross-check DONE, and it revises the earlier
+theory rather than confirming it outright.** `CSV-01-12.zip` finished
+transferring; extracted just `Syn.csv` (637MB, the SYN-flood attack-type
+file, 1,582,681 flow rows). Ran inference with the continued checkpoint
+(`model/flowpic_0p3_validated_v1_continued/resnext50_32x4d_best.ckpt`) on
+just the two flagged stems' test images
+(`scripts/diagnose_test_gap_infer.py` → `dataset/CIC_official_labels/flagged_windows_predictions.csv`)
+and cross-referenced against `Syn.csv` (`scripts/diagnose_test_gap_crossref.py`).
+Key facts established:
+
+- Full test set with this checkpoint: 2,136 false positives (not the
+  3,024 quoted in the prior session's note — that number was against a
+  different/earlier checkpoint state). 2,071 of those 2,136 (97.0%) sit in
+  the two flagged stems — **the 97% concentration finding replicates
+  almost exactly**, so that part of the original diagnosis holds.
+- Resolved the timezone question definitively: `window_features_real.csv`'s
+  `t0_unix` is raw pcap epoch (UTC, unambiguous —
+  `scripts/extract_window_features.py` reads packet timestamps directly).
+  `Syn.csv`'s `Timestamp` column is `America/Halifax` local time (AST,
+  UTC-4 on 2018-12-01 — DST ended 2018-11-04) — confirmed self-consistently:
+  its own flow timestamps cluster in `13:30:30`–`13:34:27` local, matching
+  `scripts/cic_ddos2019_syn_windows.json`'s documented `13:29`–`13:34`
+  schedule almost exactly.
+- **Important scope limit discovered**: `Syn.csv` only contains flows from
+  that narrow ~4-minute window (`13:30:30`–`13:34:27` local =
+  `17:30:30`–`17:34:27` UTC) — CICFlowMeter's per-attack-type export
+  doesn't cover the full day, just the attack's active span (plus a
+  handful of concurrent BENIGN flows). This means it can only confirm/deny
+  labels for windows that fall inside that ~4-minute band.
+- Of the 2,071 flagged false positives, only **192 fall within 60s of the
+  official schedule window**; the other **1,879 range as early as 17:05:18
+  UTC — up to 24 minutes before the documented attack even starts** — a
+  time range `Syn.csv` has no data for at all, so can't be checked against
+  it directly.
+- Direct `Syn.csv` cross-reference (±2s tolerance): of the 2,071 flagged
+  FPs, **86 have a matching official `Syn`-labeled flow** (genuine
+  confirmed mislabels — these windows are provably real attack traffic
+  wrongly marked "normal" by the schedule-boundary heuristic). **0 have a
+  matching `BENIGN`-only flow. 1,985 have no official flow record at all**
+  in that window (outside `Syn.csv`'s narrow coverage, so no verdict
+  possible from this source).
+- **Feature + visual check on the un-verifiable 1,985**: mean `syn_ratio`
+  0.080 vs. 0.044 for genuine true-negatives in the same stem, mean
+  `n_packets` 302.6 vs. 122.4 — measurably busier/SYNnier than normal, but
+  a built contact sheet (8 sampled FP images vs. 4 confirmed-ddos vs. 4
+  confirmed-normal, same stem) shows the FPs look like sparse background
+  traffic — scattered faint dots — **not** the distinctive bright
+  horizontal-line signature the confirmed-ddos tiles clearly show. So
+  these are not visually attack-like; more likely unusually busy but
+  genuinely normal traffic that the model over-generalizes on.
+
+**Revised, more honest conclusion**: the prior session's framing (report
+the boundary-excluded `f1_ddos=0.932` as "the real number," raw `0.375` as
+pure label-boundary artifact) is **not well supported** — only 86/2,071
+flagged FPs (4%) are provably mislabeled; the other 96% have no ground
+truth to check either way, and what evidence exists (feature stats, visual
+inspection) points to real normal traffic, not hidden attack traffic. The
+defensible correction is much smaller: relabeling just the 86
+confirmed-mislabeled windows (not excluding the whole two stems) moves
+test `ddos_f1` from **0.419 → 0.453** and accuracy from **0.781 → 0.789**
+(recomputed from the continued checkpoint's actual confusion matrix:
+TP=822, FN=144, FP=2136, TN=7287, n=10389 — see
+`scripts/diagnose_test_gap_crossref.py` output for the derivation). This
+is a real, if modest, generalization gap on `01-12-2018` — genuinely
+worth reporting as-is (raw `ddos_f1≈0.42`, corrected `≈0.45`) rather than
+the much larger, less-supported `0.932` figure. Write this nuance into the
+paper explicitly: "label quality partially explains the gap (4% of test
+false positives), most of it is real."
+
+**2026-08-05 ~22:05 EEST — launched the deprioritized bytedump-validated-v1
+supervised run.** With the GPU free and the label cross-check done, picked
+up the long-deprioritized item: `dataset/images_per_second_window_0p3_validated_v1`
+(96,770 byte-dump PNGs, cluster-validated labels) had never been split.
+`scripts/split_flowpic_blocked.py`'s stem-regex only matched flowpic
+filenames (`..._b<id>.png`); bytedump filenames carry an extra
+`_syn<N>.png` suffix (leftover from the old heuristic's naming). Widened
+the regex in place to `_b\d+(?:_syn\d+)?\.png$` (backward compatible, still
+matches flowpic filenames) rather than forking a duplicate script. `--dry-run`
+reproduced the *exact* same per-class counts as the flowpic split
+(train ddos=1402/normal=75376, val 165/9438, test 966/9423) — confirms the
+stem-level assignment is identical across both encodings, so eval numbers
+between them will be genuinely comparable, not confounded by different
+held-out data. Applied for real (19,992 files moved). Launched
+`scripts/train_resnext_per_second_0p3_validated_v1.sh` (unchanged from its
+prior never-run form — ImageNet norm stats, focal loss, 40 epochs, matches
+the existing primary checkpoint's recipe with only the label source
+changed) in the background,
+`model/per_second_0p3_validated_v1/train_2026-08-05_2200.log`. This is
+what makes the long-planned 3-way comparison (primary vs.
+validated-bytedump vs. validated-flowpic) finally possible once it
+finishes — likely multi-hour given 224x224 images vs. flowpic's 64x64, not
+expected to complete same-session.
 
 **2026-08-01 update**: Real-data pipeline complete and a second, bigger
 workstream is in progress:
@@ -551,6 +672,128 @@ inheriting the AE's representation entirely, but loses the paper's
 "standard Deep SVDD init procedure" framing) — worth a future attempt if
 there's time, not pursued further this session.
 
+**2026-08-05, ~23:15 EEST — FIFTH power loss today (new session resuming
+work).** Machine found freshly rebooted (`uptime` ~3min at session start).
+The bytedump-validated-v1 training (§2 of `HANDOVER_2026-08-05.md`, launched
+22:05 EEST) had gotten through epochs 1-8 (all steps of epoch 8 completed,
+died mid-checkpoint-write — `resnext50_32x4d-8_2399.tmp` left as a 0-byte
+file) but never improved past epoch 2's `f1_ddos=0.0807` (saved 22:27) —
+epochs 3-8 oscillated between ~0.03 and ~0.08, the same known volatility
+pattern this recipe showed on the flowpic run before it eventually recovered
+to `f1_ddos=0.87` by epoch 16. The `CSV-03-11.zip` pull also died (365MB of
+919MB, `.part` file, no resume support — full progress lost, not
+re-launched, nothing is blocked on it per the existing handover note).
+
+Before relaunching, did a correctness pass on the training code per user
+request (make sure the code is right before spending more GPU time on it) —
+`notebook/train_resnext.py` is untouched by git status (not modified since
+the flowpic run that already validated this exact recipe), so no regression
+was introduced by the outage itself. Verified directly: class-weight math
+(`[1.9954, 0.00464]` for counts `[1402, 75376]` with `minority_boost=8`)
+recomputes exactly to the value the log printed; sample images from
+train/ddos, train/normal, and test/ddos all decode as valid non-corrupt
+grayscale 224x224 PNGs with real varied pixel content (not blank/corrupt);
+`scripts/eval_test_detailed.py` still has the `--norm-mean`/`--norm-std`
+flags from the earlier bug fix (relevant for the eventual 3-way comparison,
+though this particular run uses default ImageNet stats intentionally, to
+match the existing primary checkpoint's recipe for a valid comparison — not
+a bug). No code issues found — the epoch 1-8 oscillation is expected
+recipe behavior, not a defect.
+
+Given no real improvement occurred past epoch 2 of 8, and `train_resnext.py`
+has no optimizer/LR-schedule checkpointing anyway (resuming from epoch-2
+weights would not meaningfully differ from a fresh cosine schedule),
+restarted from scratch rather than resuming. Moved the crashed run's
+checkpoints/log aside to
+`model/per_second_0p3_validated_v1_crashed_2026-08-05_2308/` (not deleted).
+Relaunched via `nohup bash scripts/train_resnext_per_second_0p3_validated_v1.sh
+& disown`, confirmed alive past context-init and past epoch 1 step progress
+(PID 5083). Log: `model/per_second_0p3_validated_v1/train_2026-08-05_2325.log`.
+Same caveat as always: survives terminal death, not another power-off.
+`TO_RUN.sh` updated with current log path and a generalized 6th-outage
+recovery recipe.
+
+**2026-08-05 ~23:35 EEST onward — user flagged a scheduled 1:55am power
+outage; scope cut to what's actually finishable, then executed same
+session.** User said the machine's power would be cut at 1:55am (not
+another surprise outage — planned), which meant the bytedump-validated-v1
+run (started 23:19, only at epoch 3-4 with cold disk cache making it slower
+than the pre-outage attempt) had no realistic chance of reaching the
+~epoch-16+ point where this recipe historically stabilizes. Also tested
+`git push` proactively (via a disposable `test/push-access-check` branch,
+cleaned up after) and found it **did not work** — no credential helper
+configured, `fatal: could not read Username for 'https://github.com'`.
+Fixed by having the user run `gh auth login` (after routing around a
+pre-existing broken `cudnn-local-repo` apt signature by using
+`sudo snap install gh --classic` instead of apt); re-tested push
+end-to-end afterward (branch pushed, verified on GitHub, deleted both
+locally and remotely) — confirmed working.
+
+Given the time crunch, made an explicit scope decision with the user rather
+than silently deciding it: **do not put the bytedump-validated-v1 run's
+number in the paper if it's cut short** — an undertrained checkpoint
+doesn't tell you the byte-dump encoding is worse, only that it had fewer
+epochs, so including it would misrepresent the ablation. Killed that
+training process outright (PID 5083) once this was decided — no reason to
+keep burning GPU/disk on a result that wouldn't be used, and the scheduled
+outage would kill it anyway. The 3-way encoding comparison (primary vs.
+validated-bytedump vs. validated-flowpic) is **not completed** and is not
+in the paper; only two of the three legs exist (primary, done long ago;
+validated-flowpic, completed 2026-08-04). This is intentionally left as
+future work, not silently dropped — see `reports/label_validation_and_generalization_gap_2026-08-06.md`'s
+closing section.
+
+**Recovered the actual Overleaf `.tex` sources for the two loose PDFs at
+repo root** — the 2026-07-26 session's open question ("recover the Overleaf
+sources") turned out to already be answerable: the user had
+`DDoS_Attack_Detection_Using_ResNeXt50_32x4d_with_MindSpore.zip` and
+`..._paper.zip` sitting at repo root the whole time (same names as the
+PDFs, just not `.tex` — never previously unzipped/inspected). Extracted
+both:
+- `..._with_MindSpore.zip` → nearly identical to `research/main.tex` (only
+  abstract wording differs, 928 vs 925 lines) — this is genuinely the same
+  report, not a separate document. No action needed beyond noting it.
+- `..._paper.zip` → the **real** SYNShield IEEE conference paper
+  (`paper.tex`, real author block: Nehme, Al Ghoush, Farhat with the known
+  placeholder `XXXXXXX@bau.edu.lb` email) — this is a genuinely different
+  document from `ict_innovation_overleaf/main.tex`, which turned out to be
+  an unrelated, still-templated (`\TeamName` placeholder) submission for a
+  different competition track. Brought the real paper into the repo,
+  tracked, at `research/synshield_paper/` (`paper.tex` +
+  `IEEEtran.cls`/`.bst` + `references.bib` + figures) — the first time
+  this source has been under version control.
+
+**Paper edits made this session** (both `research/main.tex` and
+`research/synshield_paper/paper.tex`), using only already-complete results
+(the flowpic-validated model's numbers, finalized 2026-08-04/05 — nothing
+from tonight's cut-short run):
+- Fixed the long-flagged `SYNSheild` → `SYNShield` typo (3 occurrences,
+  `research/synshield_paper/paper.tex` only — the misspelling wasn't present
+  in `research/main.tex`).
+- Added a new subsection to both documents (`research/main.tex` §"Label-quality
+  validation and cross-day generalization", `paper.tex`
+  §"Label-Quality Validation and Cross-Day Generalization") presenting the
+  cluster-validated-labels + FlowPic + cross-day-holdout methodology, the
+  raw-vs-corrected `f1_ddos` numbers (0.419 → 0.453), and — `research/main.tex`
+  only, omitted from the paper for space — the two unsupervised baselines as
+  a reported negative result.
+- Updated `research/main.tex`'s Contributions, Limitations, and Conclusion
+  sections; updated `paper.tex`'s Limitations bullet accordingly.
+- Added `shapira2019flowpic` (FlowPic) to both `references.bib` files and
+  `ruff2018deep` (Deep SVDD) to `research/references.bib`.
+- **Not verified by compiling** — no `pdflatex`/`texlive` installed on this
+  machine, confirmed before starting. Did a manual brace/environment-balance
+  sanity check (Python script counting `\begin`/`\end` pairs and curly-brace
+  depth, comments stripped) on both files pre- and post-edit; the count is
+  unchanged by the edits (a pre-existing depth-2 imbalance in
+  `research/main.tex` predates this session, confirmed against
+  `git show HEAD:research/main.tex`). This is **not** a substitute for an
+  actual compile — recommend running it through Overleaf or a local
+  `pdflatex` pass before treating it as submission-ready.
+- `research/synshield_paper/` does not include a recompiled `paper.pdf` —
+  the zip's original `paper.pdf` predates tonight's edits and was
+  deliberately not copied in stale/unlabeled.
+
 ## Next steps (in order)
 
 1. ~~Sequential transfer of all 5 PCAP zips finishes~~ — **done 2026-08-04
@@ -570,13 +813,20 @@ there's time, not pursued further this session.
 6. ~~Autoencoder train+eval chain~~ — **done 2026-08-04 19:54 EEST**, ran
    clean. Results are weak (see above) — do NOT report as a working
    unsupervised baseline without further digging.
-7. ~~Investigate the val→test generalization gap~~ — **root cause found,
-   ~22:15 EEST**, see above: 97% of false positives sit in the two
-   sub-pcap stems overlapping the labeled attack itself, almost certainly a
-   schedule-label-boundary artifact on `01-12-2018` (the one day that
-   didn't cluster-validate), not a real generalization failure.
-   Boundary-excluded metric: `f1_ddos=0.932`. **Not yet visually
-   spot-checked** — do that before this goes in the paper as-is.
+7. ~~Investigate the val→test generalization gap~~ — **root cause found
+   2026-08-04 ~22:15 EEST, then REVISED 2026-08-05 ~22:15 EEST after the
+   official-label cross-check landed.** 97% concentration in the two
+   flagged stems still holds, but it is only **partially** a
+   schedule-label-boundary artifact: only 86/2,071 flagged false positives
+   (4%) are provably mislabeled against the official `Syn.csv`; the rest
+   have no official ground truth available (outside `Syn.csv`'s narrow
+   ~4min coverage) and look, both by feature stats and visual spot-check,
+   like real (if busier-than-typical) normal traffic — not hidden attack
+   traffic. **Defensible corrected metric: `ddos_f1≈0.453`** (relabeling
+   only the 86 confirmed mislabels), not the earlier `0.932`. See the
+   2026-08-05 ~22:15 EEST entry above for full derivation. This is now a
+   genuine, if partially explained, generalization gap worth reporting
+   honestly in the paper.
 8. ~~Investigate the autoencoder's sub-0.5 val ROC AUC (0.288)~~ — **root
    cause found, not a code bug.** `scripts/eval_flowpic_autoencoder.py`'s
    scoring/threshold logic is correct (labels, score direction,
@@ -609,24 +859,34 @@ there's time, not pursued further this session.
     detail. Current conclusion: doesn't beat the autoencoder, likely same
     underlying cause. Untried lever if revisited: SVDD encoder from random
     init instead of AE-pretrained.
-11. **Spot-check the 2,934 flagged `SAT-01-12-2018_0617`/`_0619` windows**
-    against the official CICDDoS2019 per-flow labels once
-    `dataset/CIC_official_labels/CSV-01-12.zip` finishes downloading
-    (in progress as of this writing, background job, no ETA — server
-    doesn't report total size). This is the real confirm/deny on the
-    val→test gap's root cause (item 7) before it goes in the paper as
-    anything more than a strong circumstantial finding.
-12. Eval both supervised checkpoints via existing eval scripts
-    (`HUAWEI_EVAL_ALLOW_NON_PRIMARY_CKPT=1`, and now `--norm-mean`/`--norm-std`
-    for non-ImageNet-stat checkpoints — see `eval_test_detailed.py`), write a
-    3-way comparison report (existing primary vs. validated_v1-bytedump vs.
-    flowpic_v1) — accuracy/macro-F1/ddos-F1 side by side. Bytedump variant
-    status not reconfirmed this session — check before assuming it's still
-    current.
-13. Still deferred to the end, per standing instruction: paper/report text
-    rewrite (Section III.C fix, SYNShield spelling), Mohammed Farhat
-    author/email issue, `install.sh` disposal, recovering the Overleaf
-    `.tex` sources for the two loose PDFs at repo root.
+11. ~~Spot-check the flagged `SAT-01-12-2018_0617`/`_0619` windows against
+    the official CICDDoS2019 per-flow labels~~ — **done 2026-08-05
+    ~22:15 EEST**, see item 7 above for the (revised) conclusion.
+12. **3-way comparison (primary vs. validated-bytedump vs. validated-flowpic)
+    — NOT completed, intentionally dropped for this cycle.** The
+    validated-bytedump leg was killed 2026-08-05 ~23:55 EEST at epoch ~4,
+    undertrained, per an explicit user + Claude scope decision ahead of the
+    1:55am scheduled outage: don't put a cut-short checkpoint's number in
+    the paper as if it were a real ablation result. If resumed later: relaunch
+    `scripts/train_resnext_per_second_0p3_validated_v1.sh` fresh (crashed
+    attempt preserved at
+    `model/per_second_0p3_validated_v1_crashed_2026-08-05_2308/` and
+    `model/per_second_0p3_validated_v1/train_2026-08-05_2325.log`, both
+    superseded, kept for reference only), let it run to natural
+    early-stopping (no time pressure next time), then eval all three
+    checkpoints and write the comparison. The dataset split is already done
+    (`dataset/images_per_second_window_0p3_validated_v1/{train,val,test}`) —
+    only the training + eval + write-up remain.
+13. ~~Paper/report text rewrite for the label-validation finding, SYNShield
+    spelling, recovering the Overleaf `.tex` sources~~ — **done 2026-08-06**,
+    see the entry above and `reports/label_validation_and_generalization_gap_2026-08-06.md`.
+    Still open, genuinely deferred (no action taken, no new information this
+    session): **Mohammed Farhat's placeholder email**
+    (`XXXXXXX@bau.edu.lb` in `research/synshield_paper/paper.tex`) — needs
+    the real address from Farhat or the team, not something to guess/invent.
+    `install.sh` disposal also still untouched (still sitting at repo root,
+    still believed to be Anthropic's CLI installer dropped in by accident,
+    not part of this project) — low priority, unrelated to the paper.
 
 ## Earlier session — 2026-07-26 (untracked files at root)
 
