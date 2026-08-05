@@ -11,8 +11,11 @@ of letting it go stale — remove/close items once done, don't just append.
 This thread's findings are now written into the actual paper sources
 (`research/main.tex`, `research/synshield_paper/paper.tex`) and a standalone
 report (`reports/label_validation_and_generalization_gap_2026-08-06.md`),
-committed and pushed — this is no longer just log entries, it's landed in
-the deliverables. Short version of the overall project: reworked the
+committed and pushed, **and compile-verified** (user compiled both through
+Overleaf ~00:52-00:55 EEST, confirmed containing all edits correctly —
+see the last entry before "Next steps" below) — this is no longer just log
+entries, it's landed in the deliverables, checked, and building clean.
+Short version of the overall project: reworked the
 ground-truth labeling pipeline (schedule + unsupervised clustering on flow
 features, replacing a raw SYN-count threshold), retrained on a stricter
 cross-day held-out split, and found + reported a real (if partially
@@ -781,18 +784,58 @@ from tonight's cut-short run):
   sections; updated `paper.tex`'s Limitations bullet accordingly.
 - Added `shapira2019flowpic` (FlowPic) to both `references.bib` files and
   `ruff2018deep` (Deep SVDD) to `research/references.bib`.
-- **Not verified by compiling** — no `pdflatex`/`texlive` installed on this
-  machine, confirmed before starting. Did a manual brace/environment-balance
-  sanity check (Python script counting `\begin`/`\end` pairs and curly-brace
-  depth, comments stripped) on both files pre- and post-edit; the count is
-  unchanged by the edits (a pre-existing depth-2 imbalance in
-  `research/main.tex` predates this session, confirmed against
-  `git show HEAD:research/main.tex`). This is **not** a substitute for an
-  actual compile — recommend running it through Overleaf or a local
-  `pdflatex` pass before treating it as submission-ready.
+- **Not verified by compiling at the time of writing** — no `pdflatex`/
+  `texlive` installed on this machine, confirmed before starting. Did a
+  manual brace/environment-balance sanity check (Python script counting
+  `\begin`/`\end` pairs and curly-brace depth, comments stripped) on both
+  files pre- and post-edit; the count was unchanged by the edits (a
+  pre-existing depth-2 imbalance in `research/main.tex` predates this
+  session, confirmed against `git show HEAD:research/main.tex`). **See the
+  2026-08-06 ~00:55 EEST entry below — this was subsequently verified by
+  an actual compile.**
 - `research/synshield_paper/` does not include a recompiled `paper.pdf` —
   the zip's original `paper.pdf` predates tonight's edits and was
-  deliberately not copied in stale/unlabeled.
+  deliberately not copied in stale/unlabeled. (Superseded — see below;
+  the user compiled fresh copies via Overleaf.)
+
+**2026-08-06 ~00:20 EEST — Overleaf single-file-replace instructions
+given, zips prepared as a fallback.** Two zips built for whole-project
+Overleaf import if wanted (`~/Documents/overleaf_report_2026-08-06.zip`,
+`~/Documents/overleaf_synshield_paper_2026-08-06.zip`) — not used in the
+end. User preferred updating existing Overleaf projects file-by-file
+instead: told them exactly which 2 files changed per project (`main.tex` +
+`references.bib` for the report; `paper.tex` + `references.bib` for
+SYNShield — `acronyms.tex`, `IEEEtran.cls`/`.bst`, and all figures
+untouched, no need to re-upload) so they could replace just those via
+Overleaf's upload/replace, no full re-upload needed.
+
+**2026-08-06 ~00:55 EEST — compile verified, both documents build clean
+with tonight's content.** User compiled both via Overleaf and saved the
+output PDFs to a new local `final results/` folder at repo root
+(untracked — these are downloaded outputs, not sources, left as the
+user's own working files, not added to git). Checked both with
+`pdftotext`/`pdfinfo`:
+- `final results/DDoS_Attack_Detection_Using_ResNeXt50_32x4d_with_MindSpore___paper.pdf`
+  (SYNShield) — 6 pages, `CreationDate` 2026-08-06 00:52 EEST, `Producer:
+  pdfTeX-1.40.27`. Confirmed present: "SYNShield" spelled correctly
+  throughout (typo fix landed), the new "Label-Quality Validation and
+  Cross-Day Generalization" section, `f1_ddos=0.453` corrected metric, the
+  FlowPic citation resolving correctly as `[13]` (not `??`, i.e. no broken
+  `\ref`/`\cite`).
+- `final results/DDoS_Attack_Detection_Using_ResNeXt50_32x4d_with_MindSpore (1).pdf`
+  (full report) — 33 pages, same `CreationDate`/`Producer`. Confirmed
+  present: the "Label-quality validation and cross-day generalization"
+  section and TOC entry, the raw-vs-corrected table, both unsupervised
+  baselines (autoencoder + Deep SVDD) described, citations resolving as
+  `[5]`/`[6]`.
+
+This closes out the "not verified by compiling" caveat from the earlier
+entry — both documents are confirmed building cleanly with tonight's
+content, via an actual LaTeX compile (Overleaf's, not a local one — this
+machine still has no texlive installed, unchanged). One cosmetic note: the
+report PDF's filename has a stray ` (1)` suffix (typical of a
+download-name collision) — harmless, just worth renaming before sending it
+anywhere official.
 
 ## Next steps (in order)
 
