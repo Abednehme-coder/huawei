@@ -75,7 +75,7 @@ it, as those levels also differ in encoding. An independent audit against CICFlo
 labels confirms a 4\% label-boundary error rate among flagged windows and
 raises DDoS F1 only to 0.453, indicating that known labeling errors explain a
 small portion of the gap. Packet-image DDoS work should report a cross-episode result alongside any
-same-episode one; the pipeline and all three protocols are released.
+same-episode one; the pipeline and all three protocols are documented in full to support reproduction.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -152,7 +152,7 @@ The main contributions of this paper are summarized as follows.
         are 3.7$\times$ \emph{sparser} than benign windows, producing an
         unexpected anomaly-score ordering in which attack samples are not
         assigned higher scores (Section~\ref{sec:unsup}).
-  \item A reproducible ResNeXt-50~\cite{xie2017aggregated} / MindSpore~\cite{mindspore} pipeline is released, using established byte-image~\cite{bazzi2024resnet} and FlowPic~\cite{shapira2019flowpic} representations across all three train/test separation levels.
+  \item A reproducible ResNeXt-50~\cite{xie2017aggregated} / MindSpore~\cite{mindspore} pipeline is specified end to end, using established byte-image~\cite{bazzi2024resnet} and FlowPic~\cite{shapira2019flowpic} representations across all three train/test separation levels.
 \end{itemize}
 
 Section~\ref{sec:related} places this among prior work and fixes the vocabulary
@@ -240,7 +240,7 @@ than disputed.
 Packet-image detection
   & Deep Packet~\cite{lotfollahi2020deep}; Bazzi~\cite{bazzi2024resnet}; FlowPic~\cite{shapira2019flowpic}; ResNeXt~\cite{xie2017aggregated}; MindSpore~\cite{mindspore}
   & Split granularity not stated; cross-episode generalization not quantified; separation protocol secondary
-  & Evaluates window-, capture- and episode-level separation; released pipeline spanning all three \\
+  & Evaluates window-, capture- and episode-level separation; reproducible pipeline spanning all three \\
 Evaluation bias
   & Arp~\cite{arp2022dos}; TESSERACT~\cite{pendlebury2019tesseract}; Cantone~\cite{cantone2024crossdataset}
   & General security ML and malware; measured across datasets, not across episodes within one
@@ -432,7 +432,8 @@ breaks, then interrogate the break.
 
 \subsection{Setup} Offline evaluations ran on an NVIDIA GeForce RTX~3070 with MindSpore~2.6.0,
 mindcv~0.3.0~\cite{mindcv}, Python~3.10.12 and CUDA~11.6, seed~42. All numbers
-come from scripted, re-runnable evaluations released with the code.
+come from scripted, re-runnable evaluations, detailed in Section~\ref{sec:method}
+for independent reimplementation.
 
 \subsection{Same-Episode Baseline: E1}
 \label{sec:e1}
