@@ -1,653 +1,760 @@
 % ============================================================
-% IEEE Conference Paper — IEEEtran class
-% Title: DDoS Attack Detection Using ResNeXt50-32x4d with MindSpore
+% IEEE Conference Paper - IEEEtran class
+% Title: A Controlled Cross-Day Evaluation of Packet-Image SYN-Flood
+%        Detection on Huawei MindSpore
 % Authors: Abed Al Rida Nehme, Mohamad Al Ghoush, Mohammed Farhat
 % Institution: Beirut Arab University (BAU), Lebanon
 % Compile: pdflatex -> bibtex -> pdflatex -> pdflatex
-% Note: on Overleaf use \bibliographystyle{IEEEtran} (built-in there)
 % ============================================================
 
-\documentclass[conference]{IEEEtran}
+\documentclass[conference]{IEEEtran} \IEEEoverridecommandlockouts
 
-\IEEEoverridecommandlockouts
-
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{cite}
-\usepackage{amsmath,amssymb,amsfonts}
-\usepackage{graphicx}
-\usepackage{xcolor}
-\usepackage{booktabs}
-\usepackage{array}
-\usepackage{tabularx}
-\usepackage{multirow}
-\usepackage{url}
-\usepackage[caption=false,font=footnotesize]{subfig}
-\usepackage{tikz}
-\usetikzlibrary{positioning, arrows.meta, shapes.geometric}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
-\usepackage{listings}
-\usepackage{ragged2e}
+\usepackage[T1]{fontenc} \usepackage[utf8]{inputenc} \usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts} \usepackage{graphicx}
+\usepackage{booktabs} \usepackage{array} \usepackage{url}
+\usepackage[caption=false,font=footnotesize]{subfig} \usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta} \usepackage{ragged2e}
 \usepackage{microtype}
-\usepackage{silence}
-\WarningFilter{latex}{Command \showhyphens has changed}
 
-\lstset{basicstyle=\ttfamily\scriptsize, breaklines=true,
-        frame=none, showstringspaces=false}
-
-% Allow extra inter-word stretch to avoid overfull boxes in narrow columns
 \setlength{\emergencystretch}{3em}
 
-% Search order for figures
-% Local compile: figures resolved via relative paths above
-% Overleaf: upload all figures into a "figures/" subfolder in the project root
-\graphicspath{{./}{figures/}{../../ict_innovation_overleaf/figures/}{../../research/figures/}}
+% Allow floats to occupy more of a page so fewer part-empty pages are forced.
+\renewcommand{\topfraction}{0.92}
+\renewcommand{\bottomfraction}{0.85}
+\renewcommand{\textfraction}{0.06}
+\renewcommand{\floatpagefraction}{0.80}
+\renewcommand{\dbltopfraction}{0.92}
+\renewcommand{\dblfloatpagefraction}{0.80}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{4} \graphicspath{{./}{figures/}}
 
-% ============================================================
 \begin{document}
 
-\title{DDoS Attack Detection Using ResNeXt50-32x4d with MindSpore}
+\title{A Controlled Cross-Day Evaluation of Packet-Image\\
+       SYN-Flood Detection on Huawei MindSpore}
 
 \author{
   \IEEEauthorblockN{Abed Al Rida Nehme}
-  \IEEEauthorblockA{\textit{Elec.\ \& Computer Engineering}\\
+  \IEEEauthorblockA{\textit{Electrical \& Computer Engineering}\\
     \textit{Beirut Arab University}\\
     Beirut, Lebanon\\
     202303149@bau.edu.lb}
   \and
   \IEEEauthorblockN{Mohamad Al Ghoush}
-  \IEEEauthorblockA{\textit{Elec.\ \& Computer Engineering}\\
+  \IEEEauthorblockA{\textit{Electrical \& Computer Engineering}\\
     \textit{Beirut Arab University}\\
     Beirut, Lebanon\\
-    202300735@bau.edu.lb}
+    msg072@student.bau.edu.lb}
   \and
   \IEEEauthorblockN{Mohammed Farhat}
-  \IEEEauthorblockA{\textit{Elec.\ \& Computer Engineering}\\
+  \IEEEauthorblockA{\textit{Electrical \& Computer Engineering}\\
     \textit{Beirut Arab University}\\
     Beirut, Lebanon\\
-    XXXXXXX@bau.edu.lb}
+    mif147@student.bau.edu.lb}
 }
 
 \maketitle
 
 % ============================================================
 \begin{abstract}
-Distributed Denial of Service (DDoS) attacks exploiting the TCP SYN handshake
-remain a persistent threat to network availability.
-This paper presents \textit{SYNShield}: an end-to-end deep learning pipeline
-that converts raw network packet captures (PCAP) into fixed-size $224\times224$
-grayscale images and classifies them as DDoS or benign using a
-\textbf{ResNeXt-50 (32$\times$4d)} convolutional neural network trained with
-\textbf{Huawei MindSpore} and the \textit{mindcv} toolkit.
-The primary model is trained on \textbf{0.3\,s time-window} packet images derived
-from the public \textbf{CICDDoS2019} benchmark.
-On a held-out test set of 1845 samples it achieves \textbf{98.10\%}
-accuracy and a macro F1 score of \textbf{0.9375}, with \textbf{100\%} recall on the
-DDoS class.
-A blind random sample of 270 balanced test images (seed 42) yields
-\textbf{98.9\%} accuracy and macro F1 \textbf{0.9889}.
-Cross-domain experiments confirm that train/deploy representation alignment is
-mandatory; key findings and operational caveats are documented alongside
-reproducible evaluation scripts.
-
-\textbf{Keywords:} SYN flood; DDoS detection; packet-to-image; ResNeXt-50;
-MindSpore; CICDDoS2019; intrusion detection; deep learning.
+Packet-to-image deep learning reports excellent results on DDoS benchmarks, but
+how much of that performance survives evaluation on an attack the model has
+never observed? SYNShield, a SYN-flood detector that encodes 0.3\,s traffic windows from CICDDoS2019 and classifies them with a ResNeXt-50 (32$\times$4d) network trained from scratch in Huawei MindSpore, is evaluated at three increasing levels of separation between training and test data. At
+level~1, a randomly shuffled window split, DDoS F1 is 0.885 with perfect
+recall. At level~2, held-out whole captures from the attack day used for
+training, DDoS F1 is 0.866. At level~3, an entirely held-out attack day, DDoS
+F1 collapses to 0.419. Levels~2 and~3 come from the same checkpoint, encoding and labels, differing
+only in whether the test captures come from the training day, so that
+comparison is controlled: cross-episode separation has a large effect
+\emph{even after} capture-level blocking. The similar level-1 and level-2
+scores suggest a smaller effect from window-level blocking but do not isolate
+it, as those levels also differ in encoding. An independent audit against CICFlowMeter's official per-flow
+labels confirms a 4\% label-boundary error rate among flagged windows and
+raises DDoS F1 only to 0.453, indicating that known labeling errors explain a
+small portion of the gap. Packet-image DDoS work should report a cross-episode result alongside any
+same-episode one; the pipeline and all three protocols are released.
 \end{abstract}
+
+\begin{IEEEkeywords}
+SYN flood, DDoS detection, packet-to-image, ResNeXt, Huawei MindSpore,
+Huawei Cloud ECS, CICDDoS2019, evaluation bias, cross-day generalization
+\end{IEEEkeywords}
 
 % ============================================================
 \section{Introduction}
 \label{sec:intro}
 
-TCP SYN flood attacks exploit the three-way handshake to exhaust server
-connection-state resources by sending large volumes of SYN segments without
-completing the handshake.
-Despite their relative simplicity, SYN floods account for a substantial fraction
-of volumetric DDoS incidents observed in operational networks~\cite{sharafaldin2018developing}.
-Signature-based and shallow machine-learning intrusion detection systems (IDS)
-struggle with obfuscated or novel attack variants, making automated, data-driven
-detection an active research challenge.
+TCP SYN flood attacks exhaust server connection-state resources by sending
+large volumes of SYN segments without completing the three-way handshake. They
+remain a substantial share of volumetric DDoS activity, and signature-based
+detectors continue to struggle with rate-varied
+variants~\cite{sharafaldin2019ddos}.
 
-A compelling direction is the \textit{packet-to-image} paradigm: raw packet bytes
-are arranged as two-dimensional pixel matrices and fed into a convolutional neural
-network (CNN), allowing the model to learn discriminative spatial structure
-without manual feature engineering~\cite{bazzi2020resnet, lotfollahi2020deep}.
-Building on this foundation, this paper replaces the ResNet-50 architecture used
-in earlier BAU work~\cite{bazzi2020resnet} with \textbf{ResNeXt-50 (32$\times$4d)}—a
-grouped-convolution variant offering richer representational capacity at similar
-parameter counts~\cite{xie2017aggregated}—and implements the entire training and
-inference stack on \textbf{Huawei MindSpore}~\cite{mindspore} with
-\textit{mindcv}~\cite{mindcv}.
+The \emph{packet-to-image} paradigm is an attractive response: raw packet bytes
+are laid out as a two-dimensional pixel matrix and handed to a convolutional
+network, which learns discriminative structure without manual feature
+engineering~\cite{lotfollahi2020deep,bazzi2024resnet,shapira2019flowpic}.
+Reported results on CICDDoS2019 are strikingly good, commonly 97--99\%
+accuracy. The system presented here reproduces them, and that is where this
+paper starts rather than where it ends.
 
-\textbf{Contributions.}
+Network captures are continuous and highly autocorrelated. Consecutive windows
+share flows, endpoints and the same attack burst, so any evaluation whose test
+set is drawn from the same capture session as the training set scores the model
+on an episode it has already partially observed. That is an easier task than
+detecting an attack never seen, which is what deployment demands. Related concerns about temporal and spatial
+experimental bias are documented for security machine learning more
+broadly~\cite{arp2022dos,pendlebury2019tesseract}. What has not been measured,
+to the authors' knowledge, is the size of the effect for packet-image DDoS
+detection, or \emph{which} form of separation is the one that matters.
+
+To quantify the effect of train/test separation, the detector is evaluated at
+three increasing levels. The model, encoding, and labels are held fixed across
+the two levels supporting the central comparison. Moving from a randomly
+shuffled window split to held-out captures from the same attack episode changes
+DDoS F1 only slightly, from 0.885 to 0.866, whereas evaluation on a completely
+held-out attack episode reduces DDoS F1 to 0.419.
+
+These two comparisons carry very different evidential weight, and separating
+them is central to what is claimed here. The second is controlled: one trained
+checkpoint, one encoding, one set of labels, evaluated on two held-out sets
+differing in exactly one respect, whether their captures come from the training
+day. It shows that cross-episode separation matters a great
+deal \emph{even once capture-level blocking is in place}, so blocking by
+capture, the remedy usually prescribed for temporal leakage, does not by itself
+establish that a model generalizes. The first comparison is suggestive only:
+those two levels also differ in encoding, so it is reported as bounding the
+effect of window-level blocking rather than measuring it.
+
+Once a large gap is found, the obvious next question is whether it is real or
+an artifact of the labeling used here. This is tested directly against
+independent ground truth, and unsupervised detection is then examined as a
+possible way around the problem. It does not, for a reason specific to this
+representation.
+
+The main contributions of this paper are summarized as follows.
 \begin{itemize}
-  \item A reproducible PCAP-to-checkpoint pipeline from CICDDoS2019 zips to
-        trained model, including SYN-based heuristic labeling, packet-to-image
-        conversion, and class-imbalance-aware training.
-  \item A \textbf{0.3\,s time-window} image encoding as the primary training
-        representation, with focal-loss~\cite{lin2017focal} training and
-        DDoS-F1-oriented early stopping.
-  \item Quantitative evaluation including full split metrics, blind inference,
-        calibration diagnostics, and a cross-domain mismatch study.
-  \item First open, reproducible DDoS image classifier built entirely on
-        MindSpore, supporting deployment on CPU and GPU (with an Ascend-compatible
-        graph export path).
+  \item Building on security-ML analyses of sampling and temporal
+        bias~\cite{arp2022dos,pendlebury2019tesseract}, a controlled cross-episode measurement for packet-image SYN-flood detection is provided: from
+        one checkpoint, DDoS F1 falls from 0.866 on held-out same-day captures
+        to 0.419 on a held-out attack day, with encoding, labels and model held
+        fixed (Section~\ref{sec:ladder}).
+  \item To separate generalization failure from label quality in
+        CICDDoS2019~\cite{sharafaldin2019ddos}, the held-out-day predictions are audited against CICFlowMeter's official per-flow labels, evidence independent of both the derived labels and the model's predictions. Of 2\,071 flagged windows, 86 (4\%) are confirmed
+        boundary mislabels and none are confirmed benign; correcting them moves
+        DDoS F1 from 0.419 to 0.453 (Section~\ref{sec:audit}).
+  \item Motivated by unsupervised intrusion detection~\cite{mirsky2018kitsune}
+        and deep one-class learning~\cite{ruff2018deep}, reconstruction- and distance-based alternatives are tested and a
+        representation-specific failure mode is identified: SYN-flood windows
+        are 3.7$\times$ \emph{sparser} than benign windows, producing an
+        unexpected anomaly-score ordering in which attack samples are not
+        assigned higher scores (Section~\ref{sec:unsup}).
+  \item A reproducible ResNeXt-50~\cite{xie2017aggregated} / MindSpore~\cite{mindspore} pipeline is released, using established byte-image~\cite{bazzi2024resnet} and FlowPic~\cite{shapira2019flowpic} representations across all three train/test separation levels.
 \end{itemize}
 
-The rest of the paper is organized as follows.
-Section~\ref{sec:related} surveys related work.
-Section~\ref{sec:method} describes the system design and methodology.
-Section~\ref{sec:results} presents experimental results.
-Section~\ref{sec:discussion} discusses limitations and operational caveats.
-Section~\ref{sec:conclusion} concludes with future directions.
+Section~\ref{sec:related} places this among prior work and fixes the vocabulary
+used for separation. Section~\ref{sec:method} describes the system and defines
+the three levels precisely. Section~\ref{sec:results} reports results in the
+order the investigation actually proceeded. Section~\ref{sec:discussion} draws
+out the implications, and Section~\ref{sec:conclusion} concludes.
 
 % ============================================================
 \section{Related Work}
 \label{sec:related}
 
-\subsection{DDoS Detection: Classical and Feature-Based Methods}
-Early DDoS detection relied on rule-based thresholds and statistical features
-such as SYN/ACK ratios or packet rates~\cite{sharafaldin2018developing}.
-While fast and interpretable, these approaches are brittle against rate-varied or
-low-and-slow attacks.
-Machine learning (ML) on engineered flow features improves adaptability but
-requires substantial domain expertise for feature selection and is sensitive to
-feature drift.
+\subsection{Feature-Based and Deep DDoS Detection} Early detectors used rule-based thresholds on statistics such as SYN/ACK ratio
+or packet rate: fast and interpretable, but brittle against rate-varied
+attacks. Machine learning on engineered flow features improves adaptability at
+the cost of feature engineering and drift sensitivity. Deep models have since
+been applied across intrusion detection, including autoencoder anomaly
+scoring~\cite{mirsky2018kitsune}; a recent survey reviews the full DL-IDS
+pipeline and its open challenges~\cite{xu2025dlids}. A systematic review of 89
+public NIDS datasets documents persistent quality problems and sets out best
+practices for dataset use~\cite{goldschmidt2025datasets}, several bearing
+directly on how train/test splits are formed.
 
-\subsection{Deep Learning for Network Intrusion Detection}
-Deep learning methods have been applied broadly to intrusion detection, spanning
-recurrent models for sequential traffic, autoencoders for anomaly scoring
-(e.g.,~Kitsune~\cite{mirsky2019kitsune}), and hybrid CNN–RNN architectures
-reviewed in~\cite{vinayakumar2019deep}.
-SDN-integrated deep learning detectors~\cite{niyaz2016deep} demonstrate
-near-real-time capability but depend on controller telemetry not always available
-in classical networks.
+\subsection{Packet-to-Image Representations} Lotfollahi et
+al.~\cite{lotfollahi2020deep} showed that raw byte sequences fed to CNNs
+classify encrypted traffic without decryption. Shapira and
+Shavitt~\cite{shapira2019flowpic} proposed FlowPic, encoding a time window as a
+packet-size $\times$ arrival-time histogram rather than a byte dump. Bazzi et
+al.~\cite{bazzi2024resnet} applied the byte-dump idea to SYN flood detection on
+CICDDoS2019 with ResNet-50, reporting 97.5\% accuracy.
+ResNeXt-50~\cite{xie2017aggregated} and both encodings are adopted as
+implementations; the contribution made here is the evaluation analysis, not the
+backbone.
 
-\subsection{Packet-to-Image Representations}
-Lotfollahi et al.~\cite{lotfollahi2020deep} showed that raw byte sequences fed to
-CNNs can classify encrypted traffic without decryption.
-Bazzi et al.~\cite{bazzi2020resnet} applied this idea specifically to SYN flood
-detection on CICDDoS2019~\cite{cicddos2019}, encoding individual packet bytes as
-$224\times224$ grayscale images and classifying with ResNet-50~\cite{he2016deep},
-achieving strong benchmark accuracy.
-Our work extends this line by (i)~upgrading to ResNeXt-50~\cite{xie2017aggregated},
-(ii)~using \textit{time-window} aggregation for temporal context,
-(iii)~deploying on MindSpore, and (iv)~systematically studying cross-domain
-representation transfer.
+\subsection{Experimental Bias in Security ML} Arp et al.~\cite{arp2022dos} catalogue recurring pitfalls in security machine
+learning, including sampling bias and temporal snooping, and argue that they
+routinely inflate reported performance. TESSERACT~\cite{pendlebury2019tesseract}
+shows this concretely for malware classification: enforcing temporal and
+spatial constraints substantially lowers apparent performance. Closest to the present study, Cantone et
+al.~\cite{cantone2024crossdataset} measure this at \emph{dataset} granularity:
+classifiers near perfect within one dataset fall to roughly chance across
+datasets. The present work asks the analogous question one level finer, within
+a single dataset, where the unit of correlation is a continuous capture
+belonging to a particular attack execution. That matters, because a
+practitioner who avoids cross-dataset transfer entirely may still be reporting
+same-episode numbers.
 
-\subsection{Summary Comparison}
-Table~\ref{tab:related} positions this work relative to representative prior
-approaches.
+\subsection{A Vocabulary for Separation} \label{sec:vocab} Discussing this
+precisely requires naming the levels at which a traffic dataset can be divided.
+Three are used throughout, from weakest to strongest:
 
-\begin{table}[htbp]
+\emph{Window level} assigns individual time windows to splits
+independently, so adjacent windows from one capture may land on opposite sides.
+\emph{Capture level} assigns whole source captures as units, so no window in
+test shares a capture with any window in train, though captures may still come
+from the same attack execution. \emph{Episode level} assigns whole attack
+executions as units, so the test set contains an attack the model has never
+observed in any form.
+
+
+Table~\ref{tab:related} organises this by research aspect, giving for each the
+prior work, the gap it leaves and what the present study adds. Where it records
+that split granularity is not stated, that is an observation about reporting
+practice, not an accusation that leakage occurred, and the difficulty of
+knowing either way is precisely the argument for reporting it. Where it records
+that a study does not evaluate cross-episode, that is a scope statement: those
+works pursue different questions and their contributions are relied upon rather
+than disputed.
+
+\begin{table*}[!tb]
 \centering
-\caption{Qualitative comparison with representative detection approaches.}
+\caption{Positioning and contribution by research aspect. ``Split granularity
+         not stated'' records what a publication reports, not a claim that
+         leakage occurred.}
 \label{tab:related}
-\renewcommand{\arraystretch}{1.15}
-\begin{tabular}{@{}>{\RaggedRight\arraybackslash}p{1.75cm}
-                   >{\RaggedRight\arraybackslash}p{2.45cm}
-                   >{\RaggedRight\arraybackslash}p{2.35cm}@{}}
+\renewcommand{\arraystretch}{1.1}
+\footnotesize
+\begin{tabular}{@{}>{\RaggedRight\arraybackslash}p{2.0cm}
+                   >{\RaggedRight\arraybackslash}p{4.0cm}
+                   >{\RaggedRight\arraybackslash}p{5.1cm}
+                   >{\RaggedRight\arraybackslash}p{5.2cm}@{}}
 \toprule
-\textbf{Method} & \textbf{Strengths} & \textbf{Limitations} \\
+\textbf{Aspect} & \textbf{Prior work} & \textbf{Gap} & \textbf{This work} \\
 \midrule
-Rules / thresholds & Fast, explainable & Brittle to novel attacks \\
-ML on flow features & Data-adaptive & Feature engineering burden \\
-Kitsune~\cite{mirsky2019kitsune} & Unsupervised anomaly & No DDoS-specific supervision \\
-ResNet packet-image~\cite{bazzi2020resnet} & Raw-byte patterns; strong CIC results & Single architecture; per-packet only \\
-\textbf{This work} & ResNeXt; time-window; MindSpore; full pipeline & Lab dataset; same-domain eval \\
+Packet-image detection
+  & Deep Packet~\cite{lotfollahi2020deep}; Bazzi~\cite{bazzi2024resnet}; FlowPic~\cite{shapira2019flowpic}; ResNeXt~\cite{xie2017aggregated}; MindSpore~\cite{mindspore}
+  & Split granularity not stated; cross-episode generalization not quantified; separation protocol secondary
+  & Evaluates window-, capture- and episode-level separation; released pipeline spanning all three \\
+Evaluation bias
+  & Arp~\cite{arp2022dos}; TESSERACT~\cite{pendlebury2019tesseract}; Cantone~\cite{cantone2024crossdataset}
+  & General security ML and malware; measured across datasets, not across episodes within one
+  & Controlled E2\,$\to$\,E3: DDoS F1 $0.866 \to 0.419$; gap appears between two episodes inside one dataset \\
+Label quality
+  & CICDDoS2019~\cite{sharafaldin2019ddos}; survey~\cite{goldschmidt2025datasets}
+  & Schedule-boundary uncertainty; dataset-level guidance only
+  & Audit of 2\,071 flagged windows; correction moves F1 by 0.034 \\
+Unsupervised detection
+  & Kitsune~\cite{mirsky2018kitsune}; Deep SVDD~\cite{ruff2018deep}
+  & Representation dependence under SYN floods unclear
+  & 3.7$\times$ sparsity inversion; weak anomaly separation \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 % ============================================================
 \section{System Design and Methodology}
 \label{sec:method}
 
-\subsection{Dataset}
-We use the \textbf{CICDDoS2019} dataset~\cite{cicddos2019} from the Canadian
-Institute for Cybersecurity, which contains realistic benign and attack traffic
-including multiple SYN flood scenarios captured under controlled laboratory
-conditions.
-Raw data are provided as PCAP archives and processed through the pipeline
-described below.
+Because the central E2\,$\to$\,E3 comparison concerns evaluation design, the
+model, encoding, labeling and training configuration are held fixed across
+those two conditions. This section describes the system and then defines the
+three separation levels; E1 additionally uses the byte-dump encoding and is
+therefore treated only as a contextual comparison.
 
-\subsection{PCAP Labeling}
-A lightweight SYN-count heuristic labels each PCAP before image conversion:
-any PCAP with more than \textbf{100 TCP SYN packets} is assigned the \textit{DDoS}
-class; otherwise it is labeled \textit{normal}.
-This threshold was chosen to reflect the high-volume nature of SYN floods
-and to avoid false positives from connection-heavy but benign services.
-The labeling script (\texttt{classify\_pcap\_syn.py}) performs an early exit
-once the threshold is exceeded, making it fast even on large captures.
+\subsection{Threat Model and Problem Statement} A network tap observes traffic toward a protected service while an adversary
+mounts a TCP SYN flood from distributed sources. The detector sees only packet
+headers and payload bytes as captured: no flow-exporter features, no controller
+telemetry, no endpoint instrumentation. Given a fixed window $W$, the task is
+binary, and the target is $W = 0.3$\,s with deployment on commodity CPU.
 
-\subsection{Packet-to-Image Encoding}
-For DDoS PCAPs, only TCP SYN packets are extracted (\texttt{--syn-only}) to
-isolate the attack signature; for normal PCAPs all packets are used.
-Raw packet bytes are arranged sequentially into a 2D array and resized to
-$\mathbf{224\times224}$ grayscale pixels using Pillow, following the
-methodology in~\cite{bazzi2020resnet}.
-During training, grayscale images are replicated to three channels to match the
-ImageNet-pretrained normalization expected by the backbone.
-Figure~\ref{fig:samples} illustrates example images from each class.
+\subsection{Dataset and Window Labeling}
+CICDDoS2019~\cite{sharafaldin2019ddos} is used, which provides raw
+PCAP archives with SYN-flood scenarios captured under controlled conditions.
+Two capture days contain SYN attacks: \texttt{03-11-2018} (8 sub-captures, 1567
+attack windows) and \texttt{01-12-2018} (3 sub-captures, 966 attack windows).
+That the dataset contains exactly two attack executions is what makes the cross-episode experiment possible at all, and also bounds it, a point returned to in Section~\ref{sec:limits}. Limitations of this kind are common across public NIDS datasets~\cite{goldschmidt2025datasets}.
 
-\begin{figure}[htbp]
+Packets are bucketed into non-overlapping windows of $W = 0.3$\,s indexed by
+$b = \lfloor t/W \rfloor$ on the UTC packet timestamp. A window is labeled DDoS
+if and only if \emph{both} conditions hold:
+\begin{enumerate}
+  \item the published CICDDoS2019 attack schedule overlaps the window
+        (\texttt{03-11-2018} 11:28--17:35; \texttt{01-12-2018} 13:29--13:34,
+        America/Halifax); \emph{and}
+  \item the window contains more than 100 TCP SYN packets.
+\end{enumerate}
+
+The conjunction matters: the schedule alone marks an attack period, not which
+windows within it carry attack traffic, while the SYN count alone would make
+the label a deterministic function of a feature trivially visible to the
+classifier. Requiring both grounds the label in published ground truth while
+excluding idle windows inside the attack period. A residual risk
+remains that the schedule's boundaries are themselves wrong;
+Section~\ref{sec:audit} tests exactly that against independent labels.
+
+\subsection{Encodings} \label{sec:encodings} Two window encodings are
+implemented.
+
+\textbf{Byte dump.} All packets in window $b$ are concatenated, zero-padded to
+the next perfect square, reshaped into a square array and resampled to
+$224\times224$ grayscale, following~\cite{bazzi2024resnet}. The transformation
+is \emph{identical for both classes}: no class-conditional filtering is applied,
+so the classifier cannot succeed by detecting a preprocessing artifact.
+Figure~\ref{fig:samples} shows representative windows; flood windows exhibit
+regular periodic banding produced by near-identical 64-byte SYN segments
+repeating at high rate, whereas benign windows show irregular texture from
+heterogeneous packet sizes and payloads.
+
+\textbf{FlowPic.} Following~\cite{shapira2019flowpic}, a window becomes a
+$64\times64\times3$ histogram over packet size (rows) and arrival time within
+the window (columns), with channels for all packets, TCP SYN packets, and TCP
+ACK/FIN/RST packets. Bin counts are $\log(1+x)$-scaled against a \emph{fixed
+global} clip rather than per-image min--max, so absolute volume remains a
+visual signal instead of being normalized away.
+
+\begin{figure}[!htb]
   \centering
-  \subfloat[Normal (benign) traffic]{%
-    \includegraphics[width=0.47\linewidth]{sample_normal.png}%
+  \subfloat[Benign window]{%
+    \includegraphics[width=0.33\linewidth]{sample_normal.png}%
   }\hfill
-  \subfloat[SYN-flood DDoS traffic]{%
-    \includegraphics[width=0.47\linewidth]{sample_ddos.png}%
+  \subfloat[SYN-flood window]{%
+    \includegraphics[width=0.33\linewidth]{sample_ddos.png}%
   }
-  \caption{Representative $224\times224$ grayscale packet images from the
-           primary 0.3\,s time-window pipeline on CICDDoS2019.}
+  \caption{Byte-dump encoding of $0.3$\,s windows from CICDDoS2019. The flood
+           window (b) shows periodic banding from repeated fixed-size SYN
+           segments; the benign window (a) does not.}
   \label{fig:samples}
 \end{figure}
 
-\subsection{Time-Window Aggregation}
-The \textbf{primary model} uses a \textbf{0.3\,s time-window} scheme:
-packets captured within a rolling 0.3\,s interval are aggregated into
-a single image, providing temporal context across multiple packets within
-the window.
-The resulting image set is stored under
-\path{dataset/images_per_second_window_0p3/} with \texttt{train/},
-\texttt{val/}, and \texttt{test/} subdirectories, each containing
-\texttt{ddos/} and \texttt{normal/} class folders.
-A legacy \textbf{per-packet} configuration (one image per individual packet)
-is retained for comparison.
+\subsection{Model and Training} The classifier is ResNeXt-50
+(32$\times$4d)~\cite{xie2017aggregated}, instantiated through
+\emph{mindcv}~\cite{mindcv} with a two-way head. ResNeXt replaces standard
+convolutions with grouped convolutions of cardinality $C=32$ and per-group
+width $d=4$, increasing representational diversity at comparable parameter
+count.
 
-\subsection{Model Architecture}
-The classifier is \textbf{ResNeXt-50 (32$\times$4d)}~\cite{xie2017aggregated},
-instantiated via \textit{mindcv}~\cite{mindcv} with a two-unit classification
-head (DDoS vs.\ normal) and a softmax output layer.
-ResNeXt extends ResNet by replacing standard $3\times3$ convolutions with
-\textit{grouped} convolutions parameterized by a cardinality $C=32$ and
-per-group width $d=4$, which increases representational diversity without
-proportionally increasing model size~\cite{xie2017aggregated}.
+The network is trained \emph{from scratch}: packet images share no low-level
+statistics with natural photographs. Inputs are replicated across three
+channels to match the backbone's expected shape; the byte-dump encoding uses
+ImageNet mean/std constants inherited from the natural-image recipe and not
+motivated by the data, while FlowPic runs use dataset-computed statistics.
+Table~\ref{tab:hyper} lists the configuration, which is identical across every
+run reported in this paper.
 
-\subsection{End-to-End Pipeline}
-Figure~\ref{fig:pipeline} summarizes the complete flow from raw captures to
-inference decision.
-
-\begin{figure}[htbp]
-  \centering
-  \begin{tikzpicture}[
-    node distance=0.38cm and 0.0cm,
-    box/.style={rectangle, draw=black, rounded corners=2pt,
-      minimum height=0.75cm, minimum width=4.6cm,
-      align=center, font=\small, fill=gray!7},
-    arr/.style={-{Stealth[length=2.2mm]}, thick}]
-    \node[box] (pcap)  {PCAP archives (CICDDoS2019)};
-    \node[box, below=of pcap]  (lab)   {SYN-count heuristic labeling};
-    \node[box, below=of lab]   (conv)  {Bytes $\rightarrow$ $224{\times}224$ grayscale images};
-    \node[box, below=of conv]  (split) {Train / val / test splits};
-    \node[box, below=of split] (model) {ResNeXt-50 (32$\times$4d) + MindSpore};
-    \node[box, below=of model] (eval)  {Checkpoint / evaluation / deployment};
-    \draw[arr] (pcap)  -- (lab);
-    \draw[arr] (lab)   -- (conv);
-    \draw[arr] (conv)  -- (split);
-    \draw[arr] (split) -- (model);
-    \draw[arr] (model) -- (eval);
-  \end{tikzpicture}
-  \caption{End-to-end \textit{SYNShield} pipeline: raw network captures to
-           inference decision via packet-image classification.}
-  \label{fig:pipeline}
-\end{figure}
-
-\subsection{Training Configuration}
-Training is implemented in \path{notebook/train_resnext.py} and launched by
-\path{scripts/train_resnext_per_second_0p3.sh}.
-Table~\ref{tab:hyper} details the primary hyperparameter choices.
-
-\begin{table}[htbp]
+\begin{table}[!htb]
 \centering
-\caption{Primary training hyperparameters (\texttt{per\_second\_0p3\_focal\_v2}).}
+\caption{Training configuration, identical across all reported runs.}
 \label{tab:hyper}
-\renewcommand{\arraystretch}{1.1}
-\begin{tabular}{@{}ll@{}}
+\renewcommand{\arraystretch}{1.05}
+\footnotesize
+\begin{tabular}{@{}>{\RaggedRight\arraybackslash}p{2.4cm}
+                   >{\RaggedRight\arraybackslash}p{5.1cm}@{}}
 \toprule
-\textbf{Hyperparameter} & \textbf{Value} \\
+\textbf{Setting} & \textbf{Value} \\
 \midrule
-Framework         & Huawei MindSpore 2.6.0 (Graph mode) \\
-Backbone          & ResNeXt-50 (32$\times$4d) via mindcv \\
-Loss function     & Focal loss~\cite{lin2017focal} ($\gamma{=}2.0$, minority boost $8\times$) \\
-Early stopping    & Val DDoS-F1 (\texttt{f1\_ddos}), patience 10 epochs \\
-Max epochs        & 40 \\
-Batch size        & 32 \\
-Optimizer         & Adam (cosine LR schedule) \\
-Learning rate     & $5{\times}10^{-4}$ decaying to $10^{-6}$ (1 warm-up epoch) \\
-Augmentation (train) & RandomResizedCrop(224), RandomHorizontalFlip \\
-Preprocessing (eval) & Resize 256 $\rightarrow$ CenterCrop 224, ImageNet norm. \\
-Checkpoint metric & Macro F1 on validation set \\
+Framework        & MindSpore 2.6.0, graph mode \\
+Backbone         & ResNeXt-50 (32$\times$4d), trained from scratch \\
+Loss             & Focal loss~\cite{lin2020focal}, $\gamma = 2.0$, $8\times$ minority boost \\
+Optimizer        & AdamWeightDecay, weight decay $10^{-4}$; LR
+                    $5\times10^{-4}$ cosine to $10^{-6}$, 1 warm-up epoch \\
+Schedule         & Batch 32, max 40 epochs, seed 42 \\
+Model selection  & Validation DDoS-class F1; early stop patience 10 \\
+Augmentation & RandomResizedCrop(224), RandomHorizontalFlip$^{\dagger}$ \\
+Eval transform   & Resize 256 $\rightarrow$ CenterCrop 224 \\
 \bottomrule
+\multicolumn{2}{@{}p{7.5cm}}{\scriptsize $^{\dagger}$Inherited unchanged from
+the natural-image recipe and applied identically in every run. Under the
+FlowPic encoding the horizontal axis is arrival time, so a horizontal flip
+reverses temporal order and has no clear networking interpretation; see
+Section~\ref{sec:limits}.} \\
 \end{tabular}
 \end{table}
 
-\textbf{Class imbalance.} The CICDDoS2019 0.3\,s split is heavily skewed toward
-normal traffic (1710 normal vs.\ 133 DDoS in validation).
-We address this with \textbf{focal loss} combined with an \textbf{8$\times$ minority
-boost} on the DDoS class, and use DDoS-class F1 on the validation set as the
-early-stopping criterion to prioritize attack recall.
+All splits are class-imbalanced toward benign traffic. This is addressed with
+focal loss plus an $8\times$ minority-class weight boost, and checkpoints are
+selected on validation DDoS-class F1 rather than accuracy or macro F1, so that
+model selection tracks the operationally critical quantity.
+
+\subsection{Three Levels of Train/Test Separation} \label{sec:protocols} The
+three separation levels are now defined, instantiating the vocabulary of
+Section~\ref{sec:vocab}. The
+controlled E2\,$\to$\,E3 comparison varies only attack-episode separation,
+while E1 additionally differs in encoding and is reported for context.
+
+\textbf{E1: window level, random.} All window images are pooled, shuffled
+uniformly at random and divided 80/10/10, stratified by class, as a standard
+image-classification pipeline produces when samples are partitioned without
+regard to source capture. Because windows are cut from continuous
+captures, window $b$ and window $b{+}1$ (0.3\,s apart, same flows, same hosts,
+same burst) are assigned independently, so most test windows have a
+near-duplicate neighbour in training.
+
+\textbf{E2: capture level, same attack episode.} Splits are formed at the
+granularity of whole source captures, never individual windows. Test captures
+are disjoint from training captures, but both are drawn from the \emph{same}
+attack execution on \texttt{03-11-2018}. Concretely, of that day's eight
+sub-captures, six (1402 attack windows) form the training set and the trailing
+two (165 attack windows) form this held-out set.
+
+\textbf{E3: episode level, cross-day.} An entire attack day is held out: the
+three \texttt{01-12-2018} sub-captures (966 attack windows) form the test set,
+and no capture from that day appears in training, so the model is evaluated on
+an attack execution it has never partially observed.
+
+The design of E2 is what makes this study more than a set of loosely comparable
+numbers. E2 and E3 are evaluated \emph{from the same trained checkpoint}, with
+the same encoding, labels and capture-blocking mechanism, differing in exactly
+one respect: whether the held-out captures come from the attack day the model
+trained on. That single-factor difference licenses a causal reading and carries
+the paper's central claim. E1 additionally differs in encoding, so E1\,$\to$\,E2 is
+reported as a bound rather than a clean decomposition; the resulting coverage
+is made explicit in the caption of Table~\ref{tab:ladder}.
+
+E3 additionally uses a cluster-validated labeling variant as a robustness
+measure: $k$-means ($k=2$) over per-window flow features, accepted as an attack
+split only if the selected cluster's mean SYN ratio exceeds the other cluster's
+(a flood-signature gate), falling back to schedule labels otherwise. E2 uses
+the identical labels, so this does not confound E2\,$\to$\,E3.
 
 % ============================================================
 \section{Experimental Results}
 \label{sec:results}
 
-\subsection{Experimental Setup}
-All offline evaluations were recorded on \textbf{2026-04-03} using the
-\texttt{focal\_v2} primary checkpoint.
-Hardware: \textbf{NVIDIA GeForce RTX~3070};
-software: MindSpore~2.6.0, mindcv~0.3.0, Python~3.10.12, CUDA~11.6.
-The one-shot driver is \path{scripts/run_all_eval_0p3.sh};
-fixed seed~42 ensures reproducibility.
+Results follow the order the investigation proceeded: reproduce the headline
+numbers this method family is known for, tighten the separation until something
+breaks, then interrogate the break.
 
-\subsection{Primary Model: 0.3\,s Time-Window}
-Table~\ref{tab:mainresults} presents overall accuracy, macro F1, weighted F1,
-and balanced accuracy on the validation and test splits.
+\subsection{Setup} Offline evaluations ran on an NVIDIA GeForce RTX~3070 with MindSpore~2.6.0,
+mindcv~0.3.0~\cite{mindcv}, Python~3.10.12 and CUDA~11.6, seed~42. All numbers
+come from scripted, re-runnable evaluations released with the code.
 
-\begin{table}[htbp]
+\subsection{Same-Episode Baseline: E1}
+\label{sec:e1}
+Under E1 the system reproduces the high same-episode performance reported for
+this method family: 98.10\% test accuracy on 1845 windows, macro F1 0.9375, and
+DDoS recall of exactly 1.000 on both validation and test (133/0 and 135/0),
+every error being a benign window flagged as an attack (33 and 35
+respectively).
+
+Two controls confirm this is not an artifact of imbalance or evaluation
+bookkeeping: an always-benign classifier scores 92.7\% accuracy but macro F1
+only 0.481, and a label-blind balanced subsample of 270 test images (135 per
+class, seed 42) classifies 267 correctly.
+
+At this point the system looks close to solved. The rest of this section is an
+attempt to find out whether it is.
+
+\subsection{Tightening the Separation: the Ladder} \label{sec:ladder}
+Table~\ref{tab:ladder} is the paper's central result: the same system evaluated
+at each of the three levels defined in Section~\ref{sec:protocols}.
+
+\begin{table}[!htb]
 \centering
-\caption{Overall metrics for the primary 0.3\,s window model.}
-\label{tab:mainresults}
-\renewcommand{\arraystretch}{1.1}
-\begin{tabular}{@{}lrrrr@{}}
+\caption{DDoS performance across three separation levels; E2 to E3 is controlled, while E1 differs in encoding.}
+\label{tab:ladder}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{@{}>{\RaggedRight\arraybackslash}p{0.45cm}
+                   >{\RaggedRight\arraybackslash}p{2.1cm}
+                   >{\RaggedRight\arraybackslash}p{1.25cm}rr@{}}
 \toprule
-\textbf{Split} & \textbf{$N$} & \textbf{Acc.} & \textbf{Macro F1} & \textbf{Bal.\ Acc.} \\
+& \textbf{Separation} & \textbf{Encoding}
+  & \textbf{Accuracy} & \textbf{DDoS F1} \\
 \midrule
-Validation & 1842 & 98.21\% & 0.9399 & 0.990 \\
-Test       & 1845 & 98.10\% & 0.9375 & 0.990 \\
+E1 & Window, random        & Byte dump & 0.9810 & 0.885 \\
+E2 & Capture, same episode & FlowPic   & 0.9948 & 0.866 \\
+E3 & Episode, cross-day    & FlowPic   & 0.7805 & \textbf{0.419} \\
+\midrule
+\multicolumn{3}{@{}l}{E3, 86 confirmed mislabels corrected (\S\ref{sec:audit})}
+   & 0.7889 & 0.453 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Confusion Matrices}
-Table~\ref{tab:confusion} provides the raw confusion counts for both splits.
-Notably, the model achieves \textbf{zero missed DDoS samples} (false negatives)
-on both validation and test, at the cost of 33 and 35 false positives,
-respectively.
+\textbf{The controlled result: crossing to an unseen attack episode is
+catastrophic.} From one checkpoint, held-out same-episode captures give DDoS F1
+0.866 while a held-out attack day gives 0.419, a drop of 0.447 with model,
+encoding, labels and blocking mechanism all fixed. Overall accuracy falls from
+0.9948 to 0.7805. Decomposing E3, precision is what collapses (0.278) while
+recall largely holds (0.851): the model still finds most attack windows but
+floods the operator with false alarms on traffic it has not seen before. After
+the label correction of Section~\ref{sec:audit} these become 0.307 and 0.863.
 
-\begin{table}[htbp]
-\centering
-\caption{Confusion matrices (rows = true class, cols = predicted class).}
-\label{tab:confusion}
-\renewcommand{\arraystretch}{1.1}
-\begin{tabular}{@{}lccrcc@{}}
-\toprule
- & \multicolumn{2}{c}{\textbf{Validation}} && \multicolumn{2}{c}{\textbf{Test}} \\
-\cmidrule{2-3}\cmidrule{5-6}
-\textbf{True\,\textbackslash\,Pred} & DDoS & Normal && DDoS & Normal \\
-\midrule
-DDoS   & \textbf{133} & 0  && \textbf{135} & 0  \\
-Normal & 33  & \textbf{1676} && 35  & \textbf{1675} \\
-\bottomrule
-\end{tabular}
-\end{table}
+The consequence is stronger than it first appears. Because E2 is
+\emph{already} capture-blocked, capture-level blocking alone does not secure
+cross-episode generalization: a test set can be perfectly disjoint at capture
+level and still be easy, belonging to the same attack execution with the same
+tooling, victim and rate profile. This is the packet-image analogue of the
+constraints argued for in~\cite{pendlebury2019tesseract}.
 
-\subsection{Per-Class Precision, Recall, and F1}
-Table~\ref{tab:perclass} shows per-class metrics derived from the confusion
-matrices.
-The DDoS class achieves \textbf{recall = 1.000} (no missed attacks) in both
-splits, which is the operationally critical metric for a security detector.
+\textbf{The suggestive result: capture-level blocking within an episode appears
+to cost little.} Enforcing that no test window shares a capture with any
+training window moves DDoS F1 from 0.885 to 0.866. No conclusion is drawn that
+window-level leakage is unimportant, because E1 and E2 also differ in encoding.
+The observation bounds the combined effect of the two changes as small, but
+cannot attribute that smallness to either one: a genuine window-blocking
+penalty offset by an encoding gain would produce exactly these numbers.
 
-\begin{table}[htbp]
-\centering
-\caption{Per-class precision, recall, and F1 on validation and test.}
-\label{tab:perclass}
-\renewcommand{\arraystretch}{1.1}
-\begin{tabular}{@{}lrrrrrr@{}}
-\toprule
- & \multicolumn{3}{c}{\textbf{Validation}} & \multicolumn{3}{c}{\textbf{Test}} \\
-\cmidrule{2-4}\cmidrule{5-7}
-\textbf{Class} & Prec. & Rec. & F1 & Prec. & Rec. & F1 \\
-\midrule
-DDoS   & 0.801 & 1.000 & 0.890 & 0.794 & 1.000 & 0.885 \\
-Normal & 1.000 & 0.981 & 0.990 & 1.000 & 0.980 & 0.990 \\
-\midrule
-Macro  & \multicolumn{3}{c}{0.940} & \multicolumn{3}{c}{0.937} \\
-\bottomrule
-\end{tabular}
-\end{table}
+The configurations that can be defended are therefore reported, and the
+byte-dump runs at E2 and E3 are left unmeasured rather than interpolated.
 
-Figure~\ref{fig:barchart} visualizes the per-class precision, recall, and F1
-on the test split.
+\subsection{Is the Collapse a Labeling Artifact?} \label{sec:audit} A large
+drop invites an obvious alternative explanation: perhaps E3 is not measuring
+generalization at all, but the schedule-plus-SYN-count rule used here
+mislabeling the held-out day. Before any conclusion is drawn from
+Table~\ref{tab:ladder}, that explanation was tested directly.
 
-\begin{figure}[htbp]
-  \centering
-  \begin{tikzpicture}
-    \begin{axis}[
-      ybar, bar width=7pt, ymin=0, ymax=1.08,
-      ylabel={Score}, ylabel style={font=\small},
-      symbolic x coords={DDoS, Normal},
-      xtick=data, x tick label style={font=\small},
-      legend style={font=\small, at={(0.5,-0.28)}, anchor=north,
-                    legend columns=3},
-      width=\linewidth, height=5.2cm,
-      enlarge x limits=0.25,
-      grid=major, major grid style={dashed,gray!35},
-    ]
-      \addplot coordinates {(DDoS,0.794) (Normal,1.000)};
-      \addplot coordinates {(DDoS,1.000) (Normal,0.980)};
-      \addplot coordinates {(DDoS,0.885) (Normal,0.990)};
-      \legend{Precision, Recall, F1}
-    \end{axis}
-  \end{tikzpicture}
-  \caption{Per-class precision, recall, and F1 on the test split.
-           DDoS recall = 1.000 reflects zero missed attacks.}
-  \label{fig:barchart}
-\end{figure}
+The false positives are concentrated, which makes the question tractable: 97\%
+of the 2\,136 E3 false positives fall in the two sub-captures containing that
+day's labeled attack windows, while the other 450 stems show a 1.68\% rate. The 2\,071 flagged windows in those captures were cross-referenced against
+CICFlowMeter's official per-flow \texttt{Label} column ($\pm 2$\,s matching),
+evidence independent of both the derived labels and the model's predictions. Of
+these, 86 (4.2\%) match a \texttt{Syn} flow and are therefore confirmed
+labeling errors, 0 match a \texttt{BENIGN}-only flow and so are confirmed model
+errors, and 1\,985 (95.8\%) fall outside the export's coverage and are
+unverifiable.
 
-\subsection{Blind Test}
-To reduce evaluation bias from label order, \path{scripts/blind_test_random.py}
-draws a balanced random sample from the test split (model receives images only,
-no label information).
-With the maximum balanced sample of \textbf{270 images} (135 DDoS + 135 normal,
-seed 42), the model correctly classifies 267 of 270 images:
+Relabeling only the 86 confirmed cases raises E3 DDoS F1 from 0.419 to 0.453.
+For the 1\,985 unverifiable windows, feature statistics show them busier than
+confirmed true negatives in the same capture (mean SYN ratio 0.080 versus
+0.044; mean packet count 302.6 versus 122.4), but visual inspection shows
+sparse background traffic rather than the banded flood signature of confirmed
+attack windows.
 
-\begin{center}
-\begin{tabular}{@{}lrr@{}}
-\toprule
-\textbf{True\textbackslash Pred} & DDoS & Normal \\
-\midrule
-DDoS   & 135 & 0 \\
-Normal & 3   & 132 \\
-\midrule
-Accuracy & \multicolumn{2}{c}{\textbf{98.9\%}} \\
-Macro F1 & \multicolumn{2}{c}{\textbf{0.9889}} \\
-\bottomrule
-\end{tabular}
-\end{center}
+The scope of what this establishes is stated deliberately. It confirms a 4\%
+label-boundary error rate among flagged windows with zero confirmed benign
+flows flagged; correcting those errors moves DDoS F1 by 0.034, leaving the great
+majority of the 0.447 gap unexplained by labeling. It does \emph{not} establish
+that the remaining 96\% are correctly labeled: they are unverifiable, not
+verified. The feature and visual evidence is consistent with most being genuine
+false positives but is weaker than official labels, so the claim is bounded
+accordingly. This is weaker than excluding the two captures outright would
+permit, implying DDoS F1 $\approx 0.93$, but it is what the evidence
+supports.
 
-\subsection{ROC, Precision--Recall, and Calibration}
-Figure~\ref{fig:rocpr} shows the ROC and precision--recall curves on the
-test split (generated by \path{scripts/eval_roc_pr_calibration.py}).
-The calibration diagnostic yields a test \textbf{Expected Calibration
-Error (ECE) $\approx$ 0.074} and a heuristic max-F1 threshold of
-$\approx 0.87$ on the DDoS softmax probability (Fig.~\ref{fig:diag}).
+\subsection{Can Unsupervised Detection Sidestep the Problem?} \label{sec:unsup}
+If labeling is a persistent worry, an appealing escape is to stop using labels
+altogether. That was tested as well. Two anomaly detectors were trained on
+benign windows only, never exposing a DDoS label, under E3.
 
-\begin{figure}[htbp]
-  \centering
-  \subfloat[ROC curve]{%
-    \includegraphics[width=0.47\linewidth]{roc_test.pdf}%
-  }\hfill
-  \subfloat[Precision--recall curve]{%
-    \includegraphics[width=0.47\linewidth]{pr_test.pdf}%
-  }
-  \caption{ROC and precision--recall curves for the primary 0.3\,s model
-           on the test split (via \texttt{run\_all\_paper\_figures.sh}).}
-  \label{fig:rocpr}
-\end{figure}
+A convolutional autoencoder scoring by reconstruction error reached test ROC
+AUC 0.601, but validation ROC AUC was 0.288, materially \emph{below} chance. A
+below-chance detector is usually a bug; here it is a property of the data. DDoS
+windows have a nonzero-pixel fraction of 0.0159 against 0.0589 for benign
+windows, i.e.\ $3.7\times$ \emph{sparser}: a flood is a torrent of
+near-identical minimal segments concentrating mass into few bins, whereas
+ordinary traffic scatters widely. In this representation the
+extreme sparsity and concentration of SYN-flood windows make them comparatively
+easy to reconstruct, violating the expected ordering in which attack samples
+receive higher reconstruction or distance scores: a well-fitted model scores
+attacks as \emph{more} normal than normal traffic.
 
-\begin{figure}[htbp]
-  \centering
-  \subfloat[Confusion matrix heatmap]{%
-    \includegraphics[width=0.47\linewidth]{confusion_heatmap_test.pdf}%
-  }\hfill
-  \subfloat[Threshold vs.\ F1 sweep]{%
-    \includegraphics[width=0.47\linewidth]{threshold_f1_test.pdf}%
-  }
-  \caption{Test-split diagnostics: confusion heatmap (left) and F1 score
-           as a function of the DDoS probability threshold (right). The
-           heuristic max-F1 threshold is $\approx 0.87$.}
-  \label{fig:diag}
-\end{figure}
+Deep SVDD~\cite{ruff2018deep} shows similarly weak separation, consistent with
+the same representation-level difficulty. After arresting a textbook
+hypersphere collapse with a minimum-embedding-variance floor, it reached ROC
+AUC 0.519, near chance, and its encoder is autoencoder-pretrained, so it
+inherits the same representation property.
 
-\subsection{Comparison with Baselines}
-Table~\ref{tab:baseline} contrasts the primary model with a trivial majority
-classifier and the legacy per-packet configuration.
+These are reported as negative results with an identified cause rather than
+tuning failures. The practical implication is that anomaly-detection framings
+of DDoS should verify that their representation actually places attack traffic
+on the high-score side before relying on that ordering.
 
-\begin{table}[htbp]
-\centering
-\caption{Performance comparison across configurations on respective test sets.}
-\label{tab:baseline}
-\renewcommand{\arraystretch}{1.1}
-\begin{tabular}{@{}>{\RaggedRight\arraybackslash}p{3.2cm}rrc@{}}
-\toprule
-\textbf{Configuration} & \textbf{$N$} & \textbf{Acc.} & \textbf{Macro F1} \\
-\midrule
-Always predict Normal & 1845 & 92.7\% & 0.481 \\
-Per-packet ckpt\,$^\dagger$ on 0.3\,s test (cross-domain) & 1845 & 89.9\% & 0.473 \\
-Per-packet ckpt\,$^\dagger$ on per-packet test & 19\,300 & 98.8\% & 0.497 \\
-Per-packet ckpt\,$^\dagger$ blind test & 3000 & 99.9\% & 0.9993 \\
-\textbf{Ours (0.3\,s, primary)} & \textbf{1845} & \textbf{98.10\%} & \textbf{0.9375} \\
-\bottomrule
-\multicolumn{4}{@{}l}{\scriptsize $^\dagger$\texttt{model/resnext50\_32x4d\_best.ckpt}} \\
-\end{tabular}
-\end{table}
-
-The majority-class baseline achieves 92.7\% accuracy due to class imbalance,
-which confirms that accuracy alone is insufficient for security evaluation.
-The macro F1 of the primary model (0.9375) far exceeds the baseline (0.481),
-demonstrating meaningful attack detection beyond statistical luck.
+\subsection{Representation Transfer} A final control confirms the two encodings
+are not interchangeable, which is why the E1 row of Table~\ref{tab:ladder} is
+not treated as substitutable for a byte-dump run at E2. A window-trained
+checkpoint applied to per-packet images (19\,300 samples) yields macro F1
+0.497, argmax never once predicting DDoS, so the 98.8\% headline accuracy is
+entirely the benign majority. Symmetrically, a per-packet checkpoint on window
+images (1\,845 samples) gives macro F1 0.473 and zero DDoS recall. Deployment
+must construct images exactly as training did, a constraint easy to violate
+silently, since both configurations produce plausible-looking accuracy.
 
 % ============================================================
 \section{Discussion}
 \label{sec:discussion}
 
-\subsection{Cross-Domain Representation Mismatch}
-A critical finding is that the two image representations
-(per-packet vs.\ 0.3\,s time-window) are \textbf{not interchangeable} without
-retraining.
-When the 0.3\,s checkpoint is applied to per-packet test images, macro F1 drops
-to 0.497 with argmax never predicting DDoS (19\,300 samples; 2026-04-03 run).
-Symmetrically, the per-packet checkpoint applied to the 0.3\,s test set yields
-macro F1 of 0.473 with zero DDoS recall.
-This finding underlines a fundamental requirement: \textbf{deployment must use
-the same image construction as training}.
+\subsection{What the Gap Means} Neither the E1 number nor the E3 number is
+claimed to be wrong or final; they answer different questions. E1 and E2 ask
+whether a model can recognize the rest of a partially observed attack episode,
+and the answer is nearly perfectly. E3 asks whether it can recognize an episode
+never observed, and there it retains recall 0.851 at precision 0.278.
 
-\subsection{Operational Considerations}
-The live inference service (\texttt{run\_pipeline.py}) processes per-packet
-images within rotating 0.3\,s PCAP windows. Each window logs a prediction
-$\mathit{pred} \in \{\text{ddos}, \text{normal}\}$ and the DDoS probability
-$p_\text{ddos}$.
-On public interfaces, Internet background traffic—scans, probing, heterogeneous
-protocols—may differ substantially from CICDDoS2019 training traffic, causing
-elevated false-positive rates.
-Consequently, $p_\text{ddos}$ values from the deployed model represent
-\textbf{classifier suspicion}, not confirmed incidents.
-Operational use cases should layer threshold tuning on $p_\text{ddos}$,
-consecutive-window voting, or hybrid rules before triggering automated
-responses.
+For a deployed detector E3 is the relevant question, and precision 0.278 means
+roughly three false alerts per true one: workable behind consecutive-window
+voting or threshold tuning, unusable as a direct alarm. Reporting only E1 or E2
+would present a system that appears to need no such mitigation.
 
-\subsection{Label-Quality Validation and Cross-Day Generalization}
-\label{sec:labelvalidation}
-The primary results above rely on the SYN-count heuristic of
-Section~\ref{sec:method}. To test whether that heuristic limits
-generalization, we built a second labeling pipeline that clusters
-per-window flow features (unsupervised $k$-means) and accepts a cluster
-split as the attack label only if its mean SYN ratio exceeds the other
-cluster's (a flood-signature gate), falling back to schedule-based labels
-otherwise. We paired this with a \textit{FlowPic}-style
-encoding~\cite{shapira2019flowpic}: each 0.3\,s window becomes a
-$64\times64$ packet-size$\times$arrival-time histogram, avoiding the
-natural-image assumptions of the byte-dump encoding above.
+This mirrors, at finer granularity, what Cantone et
+al.~\cite{cantone2024crossdataset} report across datasets: the problem is not
+confined to transfer between separately collected corpora, but appears between
+two attack executions inside a single dataset. The recommendation that follows
+is narrow. Papers in this family should state split granularity explicitly and,
+where a dataset contains more than one attack execution, report a cross-episode
+result alongside any same-episode one, at the cost of one extra evaluation on
+data already collected. Because E2 is itself capture-blocked and still scores
+0.866, this rests on the controlled E2\,$\to$\,E3 comparison alone.
 
-To stress-test generalization beyond the same-domain split used
-elsewhere in this paper, we held out an \textbf{entire attack day}
-(\texttt{01-12-2018}) as test and trained only on the other attack day
-(\texttt{03-11-2018}) plus normal-only captures --- a cross-day test, not
-just unseen windows from an attack the model saw part of. The resulting
-model reached validation $\mathit{f1\_ddos}=0.866$, but held-out
-cross-day test $\mathit{f1\_ddos}$ dropped to \textbf{0.419}. We
-cross-referenced the flagged false positives against CICFlowMeter's
-official per-flow \texttt{Label} column --- independent of both our
-derived labels and the model's own predictions --- and confirmed that
-\textbf{86 of 2{,}071} flagged windows (4\%) are provably mislabeled by
-the schedule-boundary heuristic; relabeling only those raises test
-$\mathit{f1\_ddos}$ to \textbf{0.453} (Table~\ref{tab:gapfix}). Feature
-and visual inspection of the remaining, unverifiable false positives
-shows they resemble genuine (if busier-than-typical) normal traffic
-rather than disguised attack traffic, so we report this as a real,
-only partially label-driven cross-day generalization gap rather than
-overstate it as a pure labeling artifact.
+\subsection{Deployment} The same lesson has a concrete operational form. The detector runs on a 2-vCPU
+Huawei ECS instance: \texttt{tcpdump} writes rotating 0.3\,s captures, each is
+encoded and classified, and one JSON record per window is logged with its DDoS
+probability. The service sustains continuous operation on CPU alone without backlog,
+establishing feasibility; per-window latency is not instrumented, so no
+throughput claim is made (Section~\ref{sec:limits}). Deployments that threshold
+the score rather than taking argmax should note that under E1 probabilities are
+moderately miscalibrated (expected calibration error $\approx 0.074$) with an
+F1-maximizing threshold near 0.87 rather than 0.5~\cite{guo2017calibration},
+and that a threshold tuned on same-episode data has no guarantee of
+transferring.
 
-\begin{table}[htbp]
-\centering
-\caption{Cross-day test metrics before/after relabeling confirmed mislabels.}
-\label{tab:gapfix}
-\renewcommand{\arraystretch}{1.1}
-\begin{tabular}{@{}lrr@{}}
-\toprule
-\textbf{Metric} & \textbf{Raw} & \textbf{Corrected (86 relabeled)} \\
-\midrule
-Accuracy      & 0.7805 & 0.7889 \\
-DDoS F1       & 0.419  & 0.453  \\
-\bottomrule
-\end{tabular}
-\end{table}
+Two caveats follow. Internet background traffic differs substantially from
+laboratory capture conditions, a larger shift than E3 measures, so logged
+probabilities represent classifier suspicion, not confirmed incidents. And as a
+live instance of the finding reported here, the deployed path builds per-packet
+images while the checkpoint was trained on window images, exactly the mismatch
+shown above to collapse DDoS recall to zero.
 
-\subsection{Limitations}
-\begin{itemize}
-  \item Evaluation is \textbf{same-domain} (train and test from CICDDoS2019);
-        generalization to other datasets or enterprise traffic is not validated.
-  \item The SYN-count labeling heuristic may mislabel PCAPs containing
-        connection-heavy benign services; Section~\ref{sec:labelvalidation}
-        found this accounts for a confirmed 4\% of cross-day test false
-        positives, with the remaining gap attributable to genuine
-        generalization difficulty rather than mislabeling.
-  \item The system covers only TCP SYN floods; UDP amplification, HTTP floods,
-        and application-layer attacks are out of scope.
-  \item Adversarial crafting of packet bytes to evade the image classifier
-        is not evaluated.
-\end{itemize}
+\subsection{Limitations} \label{sec:limits}
+
+The controlled result is E2\,$\to$\,E3; E1 also changes encoding, so it bounds
+rather than isolates window-level blocking. A single seed and only two
+SYN-flood executions make the 0.447 gap a point estimate from one held-out
+episode. Augmentation is inherited from the natural-image recipe: under FlowPic
+the horizontal axis is time, so \texttt{RandomHorizontalFlip} reverses temporal
+order and \texttt{RandomResizedCrop} rescales bins; both are applied identically
+in every condition and cannot explain the gap, but a no-flip ablation would
+settle it. One architecture is evaluated, with no claim that it beats SYN-rate,
+flow-feature or neural baselines, and latency and adversarial robustness are
+not assessed.
 
 % ============================================================
-\section{Conclusion and Future Work}
+\section{Conclusion}
 \label{sec:conclusion}
 
-We presented \textit{SYNShield}, an end-to-end deep learning pipeline for
-detecting SYN flood DDoS attacks by classifying 0.3\,s time-window packet
-images with a ResNeXt-50 model trained on Huawei MindSpore.
-The primary model achieves \textbf{98.10\%} test accuracy, \textbf{0.9375}
-macro F1, and \textbf{100\% recall on the DDoS class} with zero missed attacks.
-A blind evaluation on 270 balanced samples confirms strong performance at 98.9\%
-accuracy and macro F1 of 0.9889.
-Cross-domain experiments reveal that representation alignment between training
-and deployment is non-negotiable; operational deployments that violate this
-constraint exhibit near-random DDoS detection.
+SYNShield, a packet-image SYN-flood detector on Huawei MindSpore, was built to
+measure how much of this method family's reported performance survives
+increasing train/test separation. Holding checkpoint, encoding and labels
+fixed, DDoS F1 falls from 0.866 on held-out captures from the training episode
+to 0.419 on a held-out attack day; an audit against official per-flow labels
+confirms a 4\% label-boundary error rate and raises it only to 0.453. A random
+window split gives 0.885, close to the same-episode blocked result, though that
+comparison is confounded by an encoding change. Two unsupervised baselines fail
+because attack windows here are sparser, not denser, than benign ones.
 
-\textbf{Future work} includes:
-(1)~validation on additional DDoS families (UDP, HTTP-flood) and out-of-distribution
-packet traces;
-(2)~systematic comparison of window lengths (0.3\,s, 1\,s, 5\,s) and
-dual-view fusion (SYN-only vs.\ all-packets);
-(3)~hardware export to Huawei Ascend NPU for edge deployment;
-(4)~calibrated alert strategies (thresholded $p_\text{ddos}$, temporal
-smoothing) to reduce false positives on live Internet traffic;
-(5)~adversarial robustness evaluation and domain adaptation under concept drift.
+The conclusion is specific: packet-image DDoS detection is a promising
+direction whose measured performance depends strongly on whether the test set
+contains an attack execution the model has already seen, and capture-level
+blocking alone does not establish that it does not. Future work should complete
+the encoding $\times$ separation grid, report multi-seed variance, add
+classical baselines, and extend to datasets with more than two attack
+executions.
 
-% ============================================================
-\section*{Acknowledgment}
-The authors thank Eng.\ Mustafa Bizri (Beirut Arab University) for project
-supervision and guidance throughout this work.
-They also thank the Canadian Institute for Cybersecurity for releasing the
-CICDDoS2019 dataset, and the Huawei MindSpore and \textit{mindcv} teams
-for the open-source deep learning framework used in all experiments.
+\section*{Acknowledgment} The authors thank Eng.\ Mustafa Bizri (Beirut Arab University) for supervision
+throughout this work, the Canadian Institute for Cybersecurity for CICDDoS2019,
+and the MindSpore and \emph{mindcv} teams.
 
-% ============================================================
-% IEEEtran native last-page column balancer: insert a column break
-% before this reference number so both columns end at the same height.
-% Adjust the number if the reference count changes.
-\IEEEtriggeratref{8}
-\bibliographystyle{unsrt}
-\bibliography{references}
+% ------------------------------------------------------------------
+% Bibliography embedded directly: the paper compiles anywhere with no
+% .bst file and no bibtex run required (Overleaf, local TeX Live, any
+% distribution). Generated from references.bib in IEEEtran style.
+% To go back to bibtex, restore:
+%   \bibliographystyle{IEEEtran}
+%   \bibliography{references}
+% (needs a genuine IEEEtran.bst). See paper_bibtex_version.tex.bak.
+% ------------------------------------------------------------------
+\begin{thebibliography}{10}
+\providecommand{\url}[1]{#1}
+\csname url@samestyle\endcsname
+\providecommand{\newblock}{\relax}
+\providecommand{\bibinfo}[2]{#2}
+\providecommand{\BIBentrySTDinterwordspacing}{\spaceskip=0pt\relax}
+\providecommand{\BIBentryALTinterwordstretchfactor}{4}
+\providecommand{\BIBentryALTinterwordspacing}{\spaceskip=\fontdimen2\font plus
+\BIBentryALTinterwordstretchfactor\fontdimen3\font minus
+  \fontdimen4\font\relax}
+\providecommand{\BIBforeignlanguage}[2]{{%
+\expandafter\ifx\csname l@#1\endcsname\relax
+\typeout{** WARNING: IEEEtranM.bst: No hyphenation pattern has been}%
+\typeout{** loaded for the language `#1'. Using the pattern for}%
+\typeout{** the default language instead.}%
+\else
+\language=\csname l@#1\endcsname
+\fi
+#2}}
+\providecommand{\BIBdecl}{\relax}
+\BIBdecl
+
+\bibitem{sharafaldin2019ddos}
+I.~Sharafaldin, A.~H. Lashkari, S.~Hakak, and A.~A. Ghorbani, ``Developing
+  realistic distributed denial of service ({DDoS}) attack dataset and
+  taxonomy,'' in \emph{2019 International Carnahan Conference on Security
+  Technology (ICCST)}, 2019, pp. 1--8.
+\bibitem{lotfollahi2020deep}
+M.~Lotfollahi, M.~J. Siavoshani, R.~S.~H. Zade, and M.~Saberian, ``Deep packet:
+  A novel approach for encrypted traffic classification using deep learning,''
+  \emph{Soft Computing}, vol.~24, no.~3, pp. 1999--2012, 2020.
+\bibitem{bazzi2024resnet}
+H.~S. Bazzi, A.~H. Nassar, I.~M. Haidar, A.~M. Haidar, and Z.~Doughan,
+  ``{ResNet}-based detection of {SYN} flood {DDoS} attacks,'' in \emph{2024
+  IEEE International Conference on Computing, Power and Communication
+  Technologies (IC2PCT)}, 2024, pp. 1142--1147.
+\bibitem{shapira2019flowpic}
+T.~Shapira and Y.~Shavitt, ``{FlowPic}: Encrypted internet traffic
+  classification is as easy as image recognition,'' in \emph{IEEE INFOCOM 2019
+  Workshops (INFOCOM WKSHPS)}, 2019, pp. 680--687.
+\bibitem{arp2022dos}
+D.~Arp, E.~Quiring, F.~Pendlebury, A.~Warnecke, F.~Pierazzi, C.~Wressnegger,
+  L.~Cavallaro, and K.~Rieck, ``Dos and don'ts of machine learning in computer
+  security,'' in \emph{31st USENIX Security Symposium (USENIX Security 22)},
+  2022, pp. 3971--3988.
+\bibitem{pendlebury2019tesseract}
+F.~Pendlebury, F.~Pierazzi, R.~Jordaney, J.~Kinder, and L.~Cavallaro,
+  ``{TESSERACT}: Eliminating experimental bias in malware classification across
+  space and time,'' in \emph{28th USENIX Security Symposium (USENIX Security
+  19)}, 2019, pp. 729--746.
+\bibitem{mirsky2018kitsune}
+Y.~Mirsky, T.~Doitshman, Y.~Elovici, and A.~Shabtai, ``Kitsune: An ensemble of
+  autoencoders for online network intrusion detection,'' in \emph{Network and
+  Distributed System Security Symposium (NDSS)}, 2018.
+\bibitem{ruff2018deep}
+L.~Ruff, R.~A. Vandermeulen, N.~G{\"o}rnitz, L.~Deecke, S.~A. Siddiqui,
+  A.~Binder, E.~M{\"u}ller, and M.~Kloft, ``Deep one-class classification,'' in
+  \emph{Proceedings of the 35th International Conference on Machine Learning
+  (ICML)}, 2018, pp. 4393--4402.
+\bibitem{xie2017aggregated}
+S.~Xie, R.~Girshick, P.~Doll{\'a}r, Z.~Tu, and K.~He, ``Aggregated residual
+  transformations for deep neural networks,'' in \emph{Proceedings of the IEEE
+  Conference on Computer Vision and Pattern Recognition (CVPR)}, 2017, pp.
+  1492--1500.
+\bibitem{mindspore}
+{Huawei Technologies Co., Ltd.}, ``{MindSpore}: An open-source deep learning
+  framework,'' \url{https://www.mindspore.cn/en}, 2020.
+\bibitem{xu2025dlids}
+Z.~Xu, Y.~Wu, S.~Wang, J.~Gao, T.~Qiu, Z.~Wang, H.~Wan, and X.~Zhao, ``Deep
+  learning-based intrusion detection systems: A survey,'' \emph{arXiv preprint
+  arXiv:2504.07839}, 2025.
+\bibitem{goldschmidt2025datasets}
+P.~Goldschmidt and D.~Chud{\'a}, ``Network intrusion datasets: A survey,
+  limitations, and recommendations,'' \emph{Computers \& Security}, vol. 156,
+  p. 104510, 2025.
+\bibitem{cantone2024crossdataset}
+M.~Cantone, C.~Marrocco, and A.~Bria, ``On the cross-dataset generalization of
+  machine learning for network intrusion detection,'' \emph{IEEE Access},
+  vol.~12, pp. 144\,489--144\,508, 2024.
+\bibitem{mindcv}
+{MindSpore Lab}, ``{mindcv}: A computer vision toolbox for {MindSpore},''
+  \url{https://github.com/mindspore-lab/mindcv}, 2022.
+\bibitem{lin2020focal}
+T.-Y. Lin, P.~Goyal, R.~Girshick, K.~He, and P.~Doll{\'a}r, ``Focal loss for
+  dense object detection,'' \emph{IEEE Transactions on Pattern Analysis and
+  Machine Intelligence}, vol.~42, no.~2, pp. 318--327, 2020.
+\bibitem{guo2017calibration}
+C.~Guo, G.~Pleiss, Y.~Sun, and K.~Q. Weinberger, ``On calibration of modern
+  neural networks,'' in \emph{Proceedings of the 34th International Conference
+  on Machine Learning (ICML)}, 2017, pp. 1321--1330.
+\end{thebibliography}
 
 \end{document}
